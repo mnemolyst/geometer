@@ -1,0 +1,470 @@
+var SNAP_DISTANCE = 10;
+
+function sq(x) {
+  return x*x;
+}
+
+function sgn(x) {
+  return x < 0 ? -1 : 1;
+}
+
+function sign(x) {
+  return x < 0 ? -1 : x == 0 ? 0 : 1;
+}
+
+function circle(x, y, r) {
+  this.x = x;
+  this.y = y;
+  this.r = r;
+
+  this.intersect_circle = function(c) {
+    // http://2000clicks.com/mathhelp/GeometryConicSectionCircleIntersection.aspx
+    var d2 = sq(c.x-this.x) + sq(c.y-this.y);
+    var ra2 = sq(this.r);
+    var rb2 = sq(c.r);
+    var k = 0.25*Math.sqrt((sq(this.r+c.r)-d2) * (d2-sq(this.r-c.r)));
+    if (isNaN(k))
+      return null;
+
+    var ixp1 = 0.5*(c.x+this.x) + 0.5*(c.x-this.x)*(ra2-rb2)/d2;
+    var ixp2 = 2*k*(c.y-this.y)/d2;
+    var iyp1 = 0.5*(c.y+this.y) + 0.5*(c.y-this.y)*(ra2-rb2)/d2;
+    var iyp2 = -2*k*(c.x-this.x)/d2;
+
+    return [[ixp1+ixp2, iyp1+iyp2], [ixp1-ixp2, iyp1-iyp2]];
+  }
+
+  this.intersect_line = function(l) {
+    // http://mathworld.wolfram.com/Circle-LineIntersection.html
+    var x1 = l.x1 - this.x;
+    var y1 = l.y1 - this.y;
+    var x2 = l.x2 - this.x;
+    var y2 = l.y2 - this.y;
+
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var dr2 = sq(dx) + sq(dy);
+    var D = x1*y2-x2*y1;
+
+    var sqrtdisc = Math.sqrt(sq(this.r)*dr2 - sq(D));
+    if (sqrtdisc < 0)
+      return Array();
+    else if (sqrtdisc == 0) {
+      var x = D*dy/dr2;
+      var y = -D*dx/dr2;
+      return Array([x,y]);
+    } else {
+      var x1 = (D*dy + sgn(dy)*dx*sqrtdisc)/dr2;
+      var y1 = (-D*dx + Math.abs(dy)*sqrtdisc)/dr2;
+      var x2 = (D*dy - sgn(dy)*dx*sqrtdisc)/dr2;
+      var y2 = (-D*dx - Math.abs(dy)*sqrtdisc)/dr2;
+
+      return Array([x1+this.x, y1+this.y],[x2+this.x, y2+this.y]);
+    }
+  }
+}
+
+function line(x1, y1, x2, y2) {
+  if (x1 == x2 && y1 == y2)
+    return false;
+
+  this.x1 = x1;
+  this.y1 = y1;
+  this.x2 = x2;
+  this.y2 = y2;
+
+  this.intersect_line = function(l) {
+    var denom = (this.x1-this.x2)*(l.y1-l.y2) - (this.y1-this.y2)*(l.x1-l.x2);
+    if (denom == 0)
+      return null;
+
+    var d3 = d1*(l.x1-l.x2) - d2*(this.x1-this.x2);
+    var d1 = this.x1*this.y2 - this.x2*this.y1;
+    var d2 = l.x1*l.y2 - l.x2*l.y1;
+    var d3 = d1*(l.x1-l.x2) - d2*(this.x1-this.x2);
+    var d4 = d1*(l.y1-l.y2) - d2*(this.y1-this.y2);
+
+    return [d3/denom, d4/denom];
+  }
+
+  this.dist_to_point = function(p) {
+    var cp = (this.x2 - this.x1)*(p[1] - this.y1) - (this.y2 - this.y1)*(p[0] - this.x1);
+    var dx = this.x2 - this.x1;
+    var dy = this.y2 - this.y1;
+    var dp = dx*dx + dy*dy;
+    return Math.abs(cp / Math.sqrt(dp));
+  }
+}
+
+function region(canvas, left, top, scale) {
+  this.canvas = jQuery(canvas);
+  this.ctx = canvas.getContext("2d");
+  this.left = left;
+  this.top = top;
+  this.scale = scale;
+  this.circles = Array();
+  this.lines = Array();
+  this.snappoints = Array();
+
+  // point (0, 0) is the lower left corner
+  this.point_to_pixel = function(p) {
+    var px = (p[0] - this.left) * this.scale;
+    var py = (this.top - p[1]) * this.scale;
+    return [px, py];
+  }
+
+  this.pixel_to_point = function(p) {
+    var px = (p[0] / this.scale) + this.left;
+    var py = -(p[1] / this.scale) + this.top;
+    return [px, py];
+  }
+
+  this.scale_to_screen = function(d) {
+    return d * this.scale;
+  }
+
+  this.scale_from_screen = function(d) {
+    return d / this.scale;
+  }
+
+  this.extend_line = function(l) {
+    var dx = l.x2 - l.x1;
+    var dy = l.y2 - l.y1;
+    var right = this.left + this.scale_from_screen(this.canvas.width());
+    var bottom = this.top - this.scale_from_screen(this.canvas.height());
+    
+    if (dx == 0) {
+      return new line(l.x1, bottom, l.x2, this.top);
+    } else if (dy == 0) {
+      return new line(this.left, l.y1, right, l.y2);
+    } else {
+      var m = dy/dx;
+      var ny1 = l.y1 + m*(this.left - l.x1);
+      var ny2 = l.y1 + m*(right - l.x1);
+      return new line(this.left, ny1, right, ny2);
+    }
+  }
+
+  this.draw_point = function(x, y) {
+    var p = this.point_to_pixel([x, y]);
+    this.ctx.strokeRect(p[0]-1, p[1]-1, 3, 3);
+  }
+
+  this.draw_circle = function(circ, width) {
+    width = typeof width !== 'undefined' ? width : 1;
+    var c = this.point_to_pixel([circ.x, circ.y]);
+    var r = this.scale_to_screen(circ.r);
+
+    this.ctx.beginPath();
+    this.ctx.lineWidth = width;
+    this.ctx.arc(c[0], c[1], r, 0, 2 * Math.PI);
+    this.ctx.stroke();
+  }
+
+  this.draw_line = function(l, width) {
+    width = typeof width !== 'undefined' ? width : 1;
+    el = this.extend_line(l);
+    var p1 = this.point_to_pixel([el.x1, el.y1]);
+    var p2 = this.point_to_pixel([el.x2, el.y2]);
+
+    this.ctx.beginPath();
+    this.ctx.lineWidth = width;
+    this.ctx.moveTo(p1[0], p1[1]);
+    this.ctx.lineTo(p2[0], p2[1]);
+    this.ctx.stroke();
+  }
+
+  this.draw_snappoint = function(i) {
+    this.draw_point(this.snappoints[i][0], this.snappoints[i][1]);
+  }
+
+  this.draw_snap_circle_center = function(i) {
+    this.draw_point(this.circles[i][0], this.circles[i][1]);
+  }
+
+  this.draw_snap_circle_circumference = function(i) {
+    this.draw_circle(this.circles[i], 3);
+  }
+
+  this.draw_snap_line = function(i) {
+    this.draw_line(this.lines[i], 3);
+  }
+
+  this.erase_snap = function() {
+    this.redraw(); //FIXME
+  }
+
+  this.clear = function() {
+    this.ctx.fillStyle = "rgb(255, 255, 255)";
+    this.ctx.fillRect(0, 0, this.canvas.width(), this.canvas.height());
+  }
+
+  this.draw_all = function() {
+    for (i=0; i<this.circles.length; i++) {
+      this.draw_circle(this.circles[i]);
+    }
+    for (i=0; i<this.lines.length; i++) {
+      this.draw_line(this.lines[i]);
+    }
+  }
+
+  this.redraw = function() {
+    this.clear();
+    this.draw_all();
+  }
+
+  this.regen_snappoints = function() {
+    this.snappoints = Array();
+
+    for (i=0; i<this.circles.length; i++) {
+      // add the center of the circle
+      this.snappoints.push([this.circles[i].x, this.circles[i].y]);
+
+      for (j=i+1; j<this.circles.length; j++) {
+        ps = this.circles[i].intersect_circle(this.circles[j]);
+
+        if (ps != null) {
+          this.snappoints.push(ps[0]);
+          this.snappoints.push(ps[1]);
+        }
+      }
+
+      for (j=0; j<this.lines.length; j++) {
+        ps = this.circles[i].intersect_line(this.lines[j]);
+        for (k=0; k<ps.length; k++) {
+          this.snappoints.push(ps[k]);
+        }
+      }
+    }
+
+    for (i=0; i<this.lines.length; i++) {
+      for (j=i+1; j<this.lines.length; j++) {
+        p = this.lines[i].intersect_line(this.lines[j]);
+        if (p != null) {
+          this.snappoints.push(p);
+        }
+      }
+    }
+
+    //for (i=0; i<this.snappoints.length; i++) {
+    //  this.draw_point(this.snappoints[i][0], this.snappoints[i][1]);
+    //}
+  }
+}
+
+jQuery(document).ready(function($) {
+  var baseCanvas = $('#baseCanvas');
+  var r = new region(baseCanvas[0], 0, 600, 1);
+  var state = ['no_click', 'no_snap'];
+  var draw = 'circles';
+  var snap_to = null;
+  var offset = baseCanvas.offset();
+  var cursor_at = null;
+
+  canvas_click = function(p) {
+    switch (state[0]) {
+      case 'no_click':
+        state[0] = 'point_picked';
+        r.mempoint = p;
+        break;
+      case 'point_picked':
+        switch (draw) {
+          case 'circles':
+            state[0] = 'no_click';
+
+            cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
+
+            c = new circle(r.mempoint[0], r.mempoint[1], cr);
+            r.circles.push(c);
+
+            break;
+          case 'lines':
+            state[0] = 'no_click';
+
+            l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
+            if (l)
+              r.lines.push(l);
+            break;
+        }
+
+        r.redraw();
+        r.regen_snappoints();
+        break;
+    }
+  };
+
+  $('#baseCanvas').click(function(event) {
+    var px = event.clientX - offset.left;
+    var py = event.clientY - offset.top;
+    var p = r.pixel_to_point([px, py]);
+    /*switch (state[1]) {
+      case 'no_snap':
+        var px = event.clientX - offset.left;
+        var py = event.clientY - offset.top;
+        break;
+      case 'snap_to_point':
+        var sp = r.point_to_pixel(r.snappoints[snap_to]);
+        var px = sp[0];
+        var py = sp[1];
+        break;
+    }*/
+
+    canvas_click(p);
+  });
+
+  var shownext = false;
+  $(document).keydown(function(event) {
+    if (cursor_at == null)
+      return;
+
+    if (shownext)
+      (shownext = false) || alert(event.which);
+
+    switch(event.which) {
+      case 87:
+        shownext = true;
+      case 80:
+        var smldst = SNAP_DISTANCE + 1;
+        for (i=0; i<r.snappoints.length; i++) {
+          var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
+          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            smldst = dist;
+            snap_to = i;
+            state[1] = 'snap_to_point';
+          }
+        }
+        if (state[1] == 'snap_to_point') {
+          state[1] = 'no_snap';
+          canvas_click(r.snappoints[snap_to]);
+        }
+        break;
+      case 48: case 49: case 50: case 51: case 52:
+      case 53: case 54: case 55: case 56: case 57:
+        var num = event.which - 48;
+        var curval = $('#cmdline').val();
+        $('#cmdline').val(curval + String(num));
+        break;
+      case 13:
+        if (state[0] == 'point_picked' && draw == 'circles') {
+          c = new circle(r.mempoint[0], r.mempoint[1], $('#cmdline').val());
+          r.circles.push(c);
+        }
+        break;
+      case 27:
+        $('#cmdline').val('');
+        break;
+    }
+  });
+
+  $('#baseCanvas').mousemove(function(event) {
+    var px = event.clientX - offset.left;
+    var py = event.clientY - offset.top;
+    var p = r.pixel_to_point([px, py]);
+    cursor_at = p;
+
+    /*switch (state[1]) {
+      case 'no_snap':
+        var smldst = SNAP_DISTANCE + 1;
+        var smlpdst = SNAP_DISTANCE + 1;
+        for (i=0; i<r.circles.length; i++) {
+          var dx = Math.abs(r.circles[i].x - sp[0]);
+          var dy = Math.abs(r.circles[i].y - sp[1]);
+          var dist = Math.sqrt(dx*dx + dy*dy);
+          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            smldst = dist;
+            snap_to = i;
+            state[1] = 'snap_to_circle_center';
+          }
+          if ((Math.abs(dist - r.circles[i].r) <= SNAP_DISTANCE) && (dist < smldst)) {
+            smldst = dist;
+            snap_to = i;
+            state[1] = 'snap_to_circle_circumference';
+          }
+        }
+
+        for (i=0; i<r.lines.length; i++) {
+          var dist = r.lines[i].dist_to_point(sp);
+          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            smldst = dist;
+            snap_to = i;
+            state[1] = 'snap_to_line';
+          }
+        }
+
+        for (i=0; i<r.snappoints.length; i++) {
+          var dist = Math.abs(r.snappoints[i][0] - sp[0]) + Math.abs(r.snappoints[i][1] - sp[1]);
+          if ((dist <= SNAP_DISTANCE) && (dist < smlpdst)) {
+            smlpdst = dist;
+            snap_to = i;
+            state[1] = 'snap_to_point';
+          }
+        }
+
+        switch(state[1]) { //FIXME
+          case 'snap_to_point':
+            r.draw_snappoint(snap_to);
+            break;
+          case 'snap_to_circle_center':
+            r.draw_snap_circle_center(snap_to);
+            break;
+          case 'snap_to_circle_circumference':
+            r.draw_snap_circle_circumference(snap_to);
+            break;
+          case 'snap_to_line':
+            r.draw_snap_line(snap_to);
+            break;
+        }
+        break;
+      case 'snap_to_point':
+        if (Math.abs(r.snappoints[snap_to][0] - sp[0]) + Math.abs(r.snappoints[snap_to][1] - sp[1]) > SNAP_DISTANCE) {
+          snap_to = null;
+          state[1] = 'no_snap';
+          r.erase_snap();
+        }
+        break;
+      case 'snap_to_circle_center':
+        if (Math.abs(r.circles[snap_to].x - sp[0]) + Math.abs(r.circles[snap_to].y - sp[1]) > SNAP_DISTANCE) {
+          snap_to = null;
+          state[1] = 'no_snap';
+          r.erase_snap();
+        }
+        break;
+      case 'snap_to_circle_circumference':
+        var dx = Math.abs(r.circles[snap_to].x - sp[0]);
+        var dy = Math.abs(r.circles[snap_to].y - sp[1]);
+        var dist = Math.sqrt(dx*dx + dy*dy);
+        if (Math.abs(dist - r.circles[snap_to].r) > SNAP_DISTANCE) {
+          snap_to = null;
+          state[1] = 'no_snap';
+          r.erase_snap();
+        }
+        break;
+      case 'snap_to_line':
+        if (r.lines[snap_to].dist_to_point(sp) > SNAP_DISTANCE) {
+          snap_to = null;
+          state[1] = 'no_snap';
+          r.erase_snap();
+        }
+        break;
+    }*/
+  });
+
+  $('#draw_circles').click(function() {
+    draw = 'circles';
+    $(this).addClass('selected').removeClass('non-selected');
+    $('#draw_lines').addClass('non-selected').removeClass('selected');
+  });
+
+  $('#draw_lines').click(function() {
+    draw = 'lines';
+    $(this).addClass('selected').removeClass('non-selected');
+    $('#draw_circles').addClass('non-selected').removeClass('selected');
+  });
+
+  $('#clear_all').click(function() {
+    r.circles = Array();
+    r.lines = Array();
+    r.snappoints = Array();
+    r.redraw();
+  });
+});
