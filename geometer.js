@@ -13,9 +13,9 @@ function sign(x) {
 }
 
 function circle(x, y, r) {
-  this.x = x;
-  this.y = y;
-  this.r = r;
+  this.x = parseFloat(x);
+  this.y = parseFloat(y);
+  this.r = parseFloat(r);
 
   this.intersect_circle = function(c) {
     // http://2000clicks.com/mathhelp/GeometryConicSectionCircleIntersection.aspx
@@ -68,10 +68,10 @@ function line(x1, y1, x2, y2) {
   if (x1 == x2 && y1 == y2)
     return false;
 
-  this.x1 = x1;
-  this.y1 = y1;
-  this.x2 = x2;
-  this.y2 = y2;
+  this.x1 = parseFloat(x1);
+  this.y1 = parseFloat(y1);
+  this.x2 = parseFloat(x2);
+  this.y2 = parseFloat(y2);
 
   this.intersect_line = function(l) {
     var denom = (this.x1-this.x2)*(l.y1-l.y2) - (this.y1-this.y2)*(l.x1-l.x2);
@@ -145,9 +145,9 @@ function region(canvas, left, top, scale) {
     }
   }
 
-  this.draw_point = function(x, y) {
-    var p = this.point_to_pixel([x, y]);
-    this.ctx.strokeRect(p[0]-1, p[1]-1, 3, 3);
+  this.draw_point = function(p) {
+    var sp = this.point_to_pixel(p);
+    this.ctx.strokeRect(sp[0]-1, sp[1]-1, 3, 3);
   }
 
   this.draw_circle = function(circ, width) {
@@ -175,11 +175,11 @@ function region(canvas, left, top, scale) {
   }
 
   this.draw_snappoint = function(i) {
-    this.draw_point(this.snappoints[i][0], this.snappoints[i][1]);
+    this.draw_point(this.snappoints[i]);
   }
 
   this.draw_snap_circle_center = function(i) {
-    this.draw_point(this.circles[i][0], this.circles[i][1]);
+    this.draw_point(this.circles[i][0]);
   }
 
   this.draw_snap_circle_circumference = function(i) {
@@ -217,9 +217,6 @@ function region(canvas, left, top, scale) {
     this.snappoints = Array();
 
     for (i=0; i<this.circles.length; i++) {
-      // add the center of the circle
-      this.snappoints.push([this.circles[i].x, this.circles[i].y]);
-
       for (j=i+1; j<this.circles.length; j++) {
         ps = this.circles[i].intersect_circle(this.circles[j]);
 
@@ -247,7 +244,7 @@ function region(canvas, left, top, scale) {
     }
 
     //for (i=0; i<this.snappoints.length; i++) {
-    //  this.draw_point(this.snappoints[i][0], this.snappoints[i][1]);
+    //  this.draw_point(this.snappoints[i][0]);
     //}
   }
 }
@@ -266,6 +263,7 @@ jQuery(document).ready(function($) {
       case 'no_click':
         state[0] = 'point_picked';
         r.mempoint = p;
+        r.draw_point(p);
         break;
       case 'point_picked':
         switch (draw) {
@@ -293,37 +291,69 @@ jQuery(document).ready(function($) {
     }
   };
 
+  stdin_write = function(s) {
+    var newval = $('#stdin').val() + String(s);
+    $('#stdin').val(newval);
+    return newval;
+  }
+
   $('#baseCanvas').click(function(event) {
     var px = event.clientX - offset.left;
     var py = event.clientY - offset.top;
     var p = r.pixel_to_point([px, py]);
-    /*switch (state[1]) {
-      case 'no_snap':
-        var px = event.clientX - offset.left;
-        var py = event.clientY - offset.top;
-        break;
-      case 'snap_to_point':
-        var sp = r.point_to_pixel(r.snappoints[snap_to]);
-        var px = sp[0];
-        var py = sp[1];
-        break;
-    }*/
 
     canvas_click(p);
   });
 
   var shownext = false;
   $(document).keydown(function(event) {
-    if (cursor_at == null)
-      return;
-
     if (shownext)
       (shownext = false) || alert(event.which);
 
     switch(event.which) {
-      case 87:
-        shownext = true;
-      case 80:
+      case 13:                                      //'enter'
+        if (state[0] == 'point_picked') {
+          if (isNaN(parseFloat($('#stdin').val())))
+            break;
+
+          state[0] = 'no_click';
+          switch (draw) {
+            case 'circles':
+              c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
+              r.circles.push(c);
+              r.redraw();
+              r.regen_snappoints();
+              break;
+            case 'lines':
+              rad = $('#stdin').val() * Math.PI / 180;
+              v = [Math.cos(rad), Math.sin(rad)];
+              l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + v[0], r.mempoint[1] + v[1]);
+              r.lines.push(l);
+              r.redraw();
+              r.regen_snappoints();
+              break;
+          }
+        }
+        break;
+      case 27:                                      //'esc'
+        $('#stdin').val('');
+        break;
+      case 48: case 49: case 50: case 51: case 52:  //'0'-'4'
+      case 53: case 54: case 55: case 56: case 57:  //'5'-'9'
+        stdin_write(String(event.which - 48));
+        break;
+      case 72:                                      //'h'
+        if (state[0] == 'point_picked' && draw == 'lines') {
+          state[0] = 'no_click';
+          l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
+          r.lines.push(l);
+          r.redraw();
+          r.regen_snappoints();
+        }
+        break;
+      case 80:                                      //'p'
+        if (cursor_at == null)
+          return;
         var smldst = SNAP_DISTANCE + 1;
         for (i=0; i<r.snappoints.length; i++) {
           var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
@@ -338,20 +368,23 @@ jQuery(document).ready(function($) {
           canvas_click(r.snappoints[snap_to]);
         }
         break;
-      case 48: case 49: case 50: case 51: case 52:
-      case 53: case 54: case 55: case 56: case 57:
-        var num = event.which - 48;
-        var curval = $('#cmdline').val();
-        $('#cmdline').val(curval + String(num));
-        break;
-      case 13:
-        if (state[0] == 'point_picked' && draw == 'circles') {
-          c = new circle(r.mempoint[0], r.mempoint[1], $('#cmdline').val());
-          r.circles.push(c);
+      case 86:                                      //'v'
+        if (state[0] == 'point_picked' && draw == 'lines') {
+          state[0] = 'no_click';
+          l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0], r.mempoint[1] + 1); //make a vertical line
+          r.lines.push(l);
+          r.redraw();
+          r.regen_snappoints();
         }
         break;
-      case 27:
-        $('#cmdline').val('');
+      case 87:                                      //'w'
+        shownext = true;
+        break;
+      case 173:                                     //'-'
+        stdin_write('-');
+        break;
+      case 190:                                     //'.'
+        stdin_write('.');
         break;
     }
   });
@@ -361,92 +394,6 @@ jQuery(document).ready(function($) {
     var py = event.clientY - offset.top;
     var p = r.pixel_to_point([px, py]);
     cursor_at = p;
-
-    /*switch (state[1]) {
-      case 'no_snap':
-        var smldst = SNAP_DISTANCE + 1;
-        var smlpdst = SNAP_DISTANCE + 1;
-        for (i=0; i<r.circles.length; i++) {
-          var dx = Math.abs(r.circles[i].x - sp[0]);
-          var dy = Math.abs(r.circles[i].y - sp[1]);
-          var dist = Math.sqrt(dx*dx + dy*dy);
-          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
-            smldst = dist;
-            snap_to = i;
-            state[1] = 'snap_to_circle_center';
-          }
-          if ((Math.abs(dist - r.circles[i].r) <= SNAP_DISTANCE) && (dist < smldst)) {
-            smldst = dist;
-            snap_to = i;
-            state[1] = 'snap_to_circle_circumference';
-          }
-        }
-
-        for (i=0; i<r.lines.length; i++) {
-          var dist = r.lines[i].dist_to_point(sp);
-          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
-            smldst = dist;
-            snap_to = i;
-            state[1] = 'snap_to_line';
-          }
-        }
-
-        for (i=0; i<r.snappoints.length; i++) {
-          var dist = Math.abs(r.snappoints[i][0] - sp[0]) + Math.abs(r.snappoints[i][1] - sp[1]);
-          if ((dist <= SNAP_DISTANCE) && (dist < smlpdst)) {
-            smlpdst = dist;
-            snap_to = i;
-            state[1] = 'snap_to_point';
-          }
-        }
-
-        switch(state[1]) { //FIXME
-          case 'snap_to_point':
-            r.draw_snappoint(snap_to);
-            break;
-          case 'snap_to_circle_center':
-            r.draw_snap_circle_center(snap_to);
-            break;
-          case 'snap_to_circle_circumference':
-            r.draw_snap_circle_circumference(snap_to);
-            break;
-          case 'snap_to_line':
-            r.draw_snap_line(snap_to);
-            break;
-        }
-        break;
-      case 'snap_to_point':
-        if (Math.abs(r.snappoints[snap_to][0] - sp[0]) + Math.abs(r.snappoints[snap_to][1] - sp[1]) > SNAP_DISTANCE) {
-          snap_to = null;
-          state[1] = 'no_snap';
-          r.erase_snap();
-        }
-        break;
-      case 'snap_to_circle_center':
-        if (Math.abs(r.circles[snap_to].x - sp[0]) + Math.abs(r.circles[snap_to].y - sp[1]) > SNAP_DISTANCE) {
-          snap_to = null;
-          state[1] = 'no_snap';
-          r.erase_snap();
-        }
-        break;
-      case 'snap_to_circle_circumference':
-        var dx = Math.abs(r.circles[snap_to].x - sp[0]);
-        var dy = Math.abs(r.circles[snap_to].y - sp[1]);
-        var dist = Math.sqrt(dx*dx + dy*dy);
-        if (Math.abs(dist - r.circles[snap_to].r) > SNAP_DISTANCE) {
-          snap_to = null;
-          state[1] = 'no_snap';
-          r.erase_snap();
-        }
-        break;
-      case 'snap_to_line':
-        if (r.lines[snap_to].dist_to_point(sp) > SNAP_DISTANCE) {
-          snap_to = null;
-          state[1] = 'no_snap';
-          r.erase_snap();
-        }
-        break;
-    }*/
   });
 
   $('#draw_circles').click(function() {

@@ -22,7 +22,8 @@
       <div id="draw_circles" class="control selected">circles</div>
       <div id="draw_lines" class="control non-selected">lines</div>
       <div id="clear_all" class="control">clear</div>
-      <input type="text" id="cmdline" size="25" />
+      <div><label for="stdin">stdin:</label><input type="text" id="stdin" size="25" readonly="readonly" /></div>
+      <div><label for="stdout">stdout:</label><input type="text" id="stdout" size="25" readonly="readonly" /></div>
     </div>
   </div>
 </body>
