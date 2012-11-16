@@ -257,6 +257,7 @@ jQuery(document).ready(function($) {
   var snap_to = null;
   var offset = baseCanvas.offset();
   var cursor_at = null;
+  var shownext = false;
 
   canvas_click = function(p) {
     switch (state[0]) {
@@ -305,7 +306,6 @@ jQuery(document).ready(function($) {
     canvas_click(p);
   });
 
-  var shownext = false;
   $(document).keydown(function(event) {
     if (shownext)
       (shownext = false) || alert(event.which);
@@ -342,6 +342,23 @@ jQuery(document).ready(function($) {
       case 53: case 54: case 55: case 56: case 57:  //'5'-'9'
         stdin_write(String(event.which - 48));
         break;
+      case 67:                                      //'c'
+        if (cursor_at == null)
+          return;
+        var smldst = SNAP_DISTANCE + 1;
+        for (i=0; i<r.circles.length; i++) {
+          var dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
+          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            smldst = dist;
+            snap_to = i;
+            state[1] = 'snap_to';
+          }
+        }
+        if (state[1] == 'snap_to') {
+          state[1] = 'no_snap';
+          canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
+        }
+        break;
       case 72:                                      //'h'
         if (state[0] == 'point_picked' && draw == 'lines') {
           state[0] = 'no_click';
@@ -349,6 +366,23 @@ jQuery(document).ready(function($) {
           r.lines.push(l);
           r.redraw();
           r.regen_snappoints();
+        }
+        break;
+      case 76:                                      //'l'
+        if (cursor_at == null)
+          return;
+        var smldst = SNAP_DISTANCE + 1;
+        for (i=0; r<r.lines.length; i++) {
+          var dist = r.lines[i].dist_to_point(cursor_at);
+          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            smldst = dist;
+            snap_to = i;
+            state[1] = 'snap_to';
+          }
+          if (state[1] = 'snap_to') {
+            state[1] = 'no_snap';
+            canvas_click(cursor_at); //TODO project cursor_at onto closest line
+          }
         }
         break;
       case 80:                                      //'p'
@@ -360,10 +394,10 @@ jQuery(document).ready(function($) {
           if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
             smldst = dist;
             snap_to = i;
-            state[1] = 'snap_to_point';
+            state[1] = 'snap_to';
           }
         }
-        if (state[1] == 'snap_to_point') {
+        if (state[1] == 'snap_to') {
           state[1] = 'no_snap';
           canvas_click(r.snappoints[snap_to]);
         }
