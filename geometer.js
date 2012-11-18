@@ -62,7 +62,7 @@ function circle(x, y, r) {
       return Array([x1+this.x, y1+this.y],[x2+this.x, y2+this.y]);
     }
   }
-}
+} // circle
 
 function line(x1, y1, x2, y2) {
   if (x1 == x2 && y1 == y2)
@@ -88,13 +88,30 @@ function line(x1, y1, x2, y2) {
   }
 
   this.dist_to_point = function(p) {
-    var cp = (this.x2 - this.x1)*(p[1] - this.y1) - (this.y2 - this.y1)*(p[0] - this.x1);
+    var cp = (this.x2 - this.x1)*(this.y1 - p[1]) - (this.y2 - this.y1)*(this.x1 - p[0]);
     var dx = this.x2 - this.x1;
     var dy = this.y2 - this.y1;
-    var dp = dx*dx + dy*dy;
+    var dp = sq(dx) + sq(dy);
     return Math.abs(cp / Math.sqrt(dp));
   }
-}
+
+  this.signed_dist_to_point = function(p) { // positive distance for points below 'this', negative otherwise
+    var cp = (this.x2 - this.x1)*(this.y1 - p[1]) - (this.y2 - this.y1)*(this.x1 - p[0]);
+    var dx = this.x2 - this.x1;
+    var dy = this.y2 - this.y1;
+    var dp = sq(dx) + sq(dy);
+    return cp / Math.sqrt(dp);
+  }
+
+  this.project_point = function(p) {
+    var x = [p[0] - this.x1, p[1] - this.y1];             // vector from [this.x1, this.y1] to p
+    var orth_r = [this.y2 - this.y1, this.x1 - this.x2];  // vector r: 'this' rotated 90 deg ccw
+    var len_r = Math.sqrt(sq(orth_r[0]) + sq(orth_r[1])); // length of r
+    var coef = this.signed_dist_to_point(p) / len_r;
+    var d = [coef * orth_r[0], coef * orth_r[1]];         // d = shortest vector from 'this' to p
+    return [p[0] - d[0], p[1] - d[1]];
+  }
+} // line
 
 function region(canvas, left, top, scale) {
   this.canvas = jQuery(canvas);
@@ -247,12 +264,12 @@ function region(canvas, left, top, scale) {
     //  this.draw_point(this.snappoints[i][0]);
     //}
   }
-}
+} // region
 
 jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
   var r = new region(baseCanvas[0], 0, 600, 1);
-  var state = ['no_click', 'no_snap'];
+  var state = ['no_click', 'no_snap', 'no_zoom']; // TODO make this include one element that indicates what event the state machine is waiting for next (zoom in, point two, etc)
   var draw = 'circles';
   var snap_to = null;
   var offset = baseCanvas.offset();
@@ -311,6 +328,12 @@ jQuery(document).ready(function($) {
       (shownext = false) || alert(event.which);
 
     switch(event.which) {
+      case 9:                                       //'tab'
+        if (draw == 'circles') {
+          $('#draw_lines').click();
+        } else {
+          $('#draw_circles').click();
+        }
       case 13:                                      //'enter'
         if (state[0] == 'point_picked') {
           if (isNaN(parseFloat($('#stdin').val())))
@@ -336,7 +359,12 @@ jQuery(document).ready(function($) {
         }
         break;
       case 27:                                      //'esc'
-        $('#stdin').val('');
+        if ($('#stdin').val() != '') {
+          $('#stdin').val('');
+        } else {
+          state = ['no_click', 'no_snap', 'no_zoom'];
+          r.redraw();
+        }
         break;
       case 48: case 49: case 50: case 51: case 52:  //'0'-'4'
       case 53: case 54: case 55: case 56: case 57:  //'5'-'9'
@@ -368,21 +396,44 @@ jQuery(document).ready(function($) {
           r.regen_snappoints();
         }
         break;
+      case 73:                                      //'i'
+        if (state[2] == 'zoom_which' && cursor_at != null) {
+          state[2] = 'no_zoom';
+          var new_left = (cursor_at[0] + r.left) / 2;
+          var new_top = (cursor_at[1] + r.top) / 2;
+          r.left = new_left;
+          r.top = new_top;
+          r.scale *= 2;
+          r.redraw();
+        }
+        break;
       case 76:                                      //'l'
         if (cursor_at == null)
           return;
         var smldst = SNAP_DISTANCE + 1;
-        for (i=0; r<r.lines.length; i++) {
+        for (i=0; i<r.lines.length; i++) {
           var dist = r.lines[i].dist_to_point(cursor_at);
           if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
             smldst = dist;
             snap_to = i;
             state[1] = 'snap_to';
           }
-          if (state[1] = 'snap_to') {
-            state[1] = 'no_snap';
-            canvas_click(cursor_at); //TODO project cursor_at onto closest line
-          }
+        }
+        if (state[1] == 'snap_to') {
+          state[1] = 'no_snap';
+          var lp = r.lines[snap_to].project_point(cursor_at);
+          canvas_click(r.lines[snap_to].project_point(cursor_at));
+        }
+        break;
+      case 79:                                      //'o'
+        if (state[2] == 'zoom_which' && cursor_at != null) {
+          state[2] = 'no_zoom';
+          var new_left = r.left * 2 - cursor_at[0];
+          var new_top = r.top * 2 - cursor_at[1];
+          r.left = new_left;
+          r.top = new_top;
+          r.scale /= 2;
+          r.redraw();
         }
         break;
       case 80:                                      //'p'
@@ -402,6 +453,16 @@ jQuery(document).ready(function($) {
           canvas_click(r.snappoints[snap_to]);
         }
         break;
+      case 83:                                      //'s'
+        jQuery.ajax({
+          url: 'save.php',
+          type: 'POST',
+          data: r,
+          complete: function(testStatus) {
+            alert(testStatus);
+          },
+        });
+        break;
       case 86:                                      //'v'
         if (state[0] == 'point_picked' && draw == 'lines') {
           state[0] = 'no_click';
@@ -413,6 +474,9 @@ jQuery(document).ready(function($) {
         break;
       case 87:                                      //'w'
         shownext = true;
+        break;
+      case 90:                                      //'z'
+        state[2] = 'zoom_which';
         break;
       case 173:                                     //'-'
         stdin_write('-');
@@ -447,5 +511,6 @@ jQuery(document).ready(function($) {
     r.lines = Array();
     r.snappoints = Array();
     r.redraw();
+    state = ['no_click', 'no_snap', 'no_zoom'];
   });
 });
