@@ -454,11 +454,12 @@ jQuery(document).ready(function($) {
         }
         break;
       case 83:                                      //'s'
+        var str = JSON.stringify(r);
+        alert(str);
         jQuery.ajax({
           url: 'save.php',
-          type: 'POST',
-          data: r,
-          complete: function(testStatus) {
+          data: str,
+          complete: function(jqHXR, testStatus) {
             alert(testStatus);
           },
         });
