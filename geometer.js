@@ -269,7 +269,7 @@ function region(canvas, left, top, scale) {
 jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
   var r = new region(baseCanvas[0], 0, 600, 1);
-  var state = ['no_click', 'no_snap', 'no_zoom']; // TODO make this include one element that indicates what event the state machine is waiting for next (zoom in, point two, etc)
+  var state = 'none';
   var draw = 'circles';
   var snap_to = null;
   var offset = baseCanvas.offset();
@@ -277,16 +277,16 @@ jQuery(document).ready(function($) {
   var shownext = false;
 
   canvas_click = function(p) {
-    switch (state[0]) {
-      case 'no_click':
-        state[0] = 'point_picked';
+    switch (state) {
+      case 'none':
+        state = 'point_picked';
         r.mempoint = p;
         r.draw_point(p);
         break;
       case 'point_picked':
         switch (draw) {
           case 'circles':
-            state[0] = 'no_click';
+            state = 'none';
 
             cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
 
@@ -295,7 +295,7 @@ jQuery(document).ready(function($) {
 
             break;
           case 'lines':
-            state[0] = 'no_click';
+            state = 'none';
 
             l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
             if (l)
@@ -334,12 +334,13 @@ jQuery(document).ready(function($) {
         } else {
           $('#draw_circles').click();
         }
+        break;
       case 13:                                      //'enter'
-        if (state[0] == 'point_picked') {
+        if (state == 'point_picked') {
           if (isNaN(parseFloat($('#stdin').val())))
             break;
 
-          state[0] = 'no_click';
+          state = 'none';
           switch (draw) {
             case 'circles':
               c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
@@ -362,7 +363,7 @@ jQuery(document).ready(function($) {
         if ($('#stdin').val() != '') {
           $('#stdin').val('');
         } else {
-          state = ['no_click', 'no_snap', 'no_zoom'];
+          state = 'none';
           r.redraw();
         }
         break;
@@ -375,21 +376,30 @@ jQuery(document).ready(function($) {
           return;
         var smldst = SNAP_DISTANCE + 1;
         for (i=0; i<r.circles.length; i++) {
-          var dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
+          var c_dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
+          var dist = Math.abs(c_dist - r.circles[i].r);
           if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
             smldst = dist;
             snap_to = i;
-            state[1] = 'snap_to';
           }
         }
-        if (state[1] == 'snap_to') {
-          state[1] = 'no_snap';
-          canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
+        if (snap_to != null) {
+          if (state == 'delete_which') {
+            state = 'none';
+            r.circles.pop(snap_to); //FIXME
+            r.redraw();
+          } else {
+            canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
+          }
+          snap_to = null;
         }
         break;
+      case 68:                                      //'d'
+        state = 'delete_which';
+        break;
       case 72:                                      //'h'
-        if (state[0] == 'point_picked' && draw == 'lines') {
-          state[0] = 'no_click';
+        if (state == 'point_picked' && draw == 'lines') {
+          state = 'none';
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
           r.lines.push(l);
           r.redraw();
@@ -397,8 +407,8 @@ jQuery(document).ready(function($) {
         }
         break;
       case 73:                                      //'i'
-        if (state[2] == 'zoom_which' && cursor_at != null) {
-          state[2] = 'no_zoom';
+        if (state == 'zoom_which' && cursor_at != null) {
+          state = 'none';
           var new_left = (cursor_at[0] + r.left) / 2;
           var new_top = (cursor_at[1] + r.top) / 2;
           r.left = new_left;
@@ -416,18 +426,22 @@ jQuery(document).ready(function($) {
           if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
             smldst = dist;
             snap_to = i;
-            state[1] = 'snap_to';
           }
         }
-        if (state[1] == 'snap_to') {
-          state[1] = 'no_snap';
-          var lp = r.lines[snap_to].project_point(cursor_at);
-          canvas_click(r.lines[snap_to].project_point(cursor_at));
+        if (snap_to != null) {
+          if (state == 'delete_which') {
+            state = 'none';
+            r.lines.pop(snap_to); //FIXME
+            r.redraw();
+          } else {
+            canvas_click(r.lines[snap_to].project_point(cursor_at));
+          }
+          snap_to = null;
         }
         break;
       case 79:                                      //'o'
-        if (state[2] == 'zoom_which' && cursor_at != null) {
-          state[2] = 'no_zoom';
+        if (state == 'zoom_which' && cursor_at != null) {
+          state = 'none';
           var new_left = r.left * 2 - cursor_at[0];
           var new_top = r.top * 2 - cursor_at[1];
           r.left = new_left;
@@ -445,12 +459,11 @@ jQuery(document).ready(function($) {
           if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
             smldst = dist;
             snap_to = i;
-            state[1] = 'snap_to';
           }
         }
-        if (state[1] == 'snap_to') {
-          state[1] = 'no_snap';
+        if (snap_to != null) {
           canvas_click(r.snappoints[snap_to]);
+          snap_to = null;
         }
         break;
       case 83:                                      //'s'
@@ -465,8 +478,8 @@ jQuery(document).ready(function($) {
         });
         break;
       case 86:                                      //'v'
-        if (state[0] == 'point_picked' && draw == 'lines') {
-          state[0] = 'no_click';
+        if (state == 'point_picked' && draw == 'lines') {
+          state = 'none';
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0], r.mempoint[1] + 1); //make a vertical line
           r.lines.push(l);
           r.redraw();
@@ -477,13 +490,16 @@ jQuery(document).ready(function($) {
         shownext = true;
         break;
       case 90:                                      //'z'
-        state[2] = 'zoom_which';
+        state = 'zoom_which';
         break;
       case 173:                                     //'-'
         stdin_write('-');
         break;
       case 190:                                     //'.'
         stdin_write('.');
+        break;
+      case 192:                                     //'`'
+        alert(state);
         break;
     }
   });
@@ -512,6 +528,6 @@ jQuery(document).ready(function($) {
     r.lines = Array();
     r.snappoints = Array();
     r.redraw();
-    state = ['no_click', 'no_snap', 'no_zoom'];
+    state = 'none';
   });
 });
