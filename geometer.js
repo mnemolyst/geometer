@@ -269,7 +269,7 @@ function region(canvas, left, top, scale) {
 jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
   var r = new region(baseCanvas[0], 0, 600, 1);
-  var state = 'none';
+  var state = ['none', 'none'];
   var draw = 'circles';
   var snap_to = null;
   var offset = baseCanvas.offset();
@@ -277,16 +277,16 @@ jQuery(document).ready(function($) {
   var shownext = false;
 
   canvas_click = function(p) {
-    switch (state) {
+    switch (state[0]) {
       case 'none':
-        state = 'point_picked';
+        state[0] = 'point_picked';
         r.mempoint = p;
         r.draw_point(p);
         break;
       case 'point_picked':
         switch (draw) {
           case 'circles':
-            state = 'none';
+            state[0] = 'none';
 
             cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
 
@@ -295,7 +295,7 @@ jQuery(document).ready(function($) {
 
             break;
           case 'lines':
-            state = 'none';
+            state[0] = 'none';
 
             l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
             if (l)
@@ -336,11 +336,11 @@ jQuery(document).ready(function($) {
         }
         break;
       case 13:                                      //'enter'
-        if (state == 'point_picked') {
+        if (state[0] == 'point_picked') {
           if (isNaN(parseFloat($('#stdin').val())))
             break;
 
-          state = 'none';
+          state[0] = 'none';
           switch (draw) {
             case 'circles':
               c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
@@ -363,7 +363,7 @@ jQuery(document).ready(function($) {
         if ($('#stdin').val() != '') {
           $('#stdin').val('');
         } else {
-          state = 'none';
+          state[0] = 'none';
           r.redraw();
         }
         break;
@@ -384,9 +384,9 @@ jQuery(document).ready(function($) {
           }
         }
         if (snap_to != null) {
-          if (state == 'delete_which') {
-            state = 'none';
-            r.circles.pop(snap_to); //FIXME
+          if (state[0] == 'delete_which') {
+            state[0] = 'none';
+            r.circles.splice(snap_to, 1);
             r.redraw();
           } else {
             canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
@@ -395,11 +395,11 @@ jQuery(document).ready(function($) {
         }
         break;
       case 68:                                      //'d'
-        state = 'delete_which';
+        state[0] = 'delete_which';
         break;
       case 72:                                      //'h'
-        if (state == 'point_picked' && draw == 'lines') {
-          state = 'none';
+        if (state[0] == 'point_picked' && draw == 'lines') {
+          state[0] = 'none';
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
           r.lines.push(l);
           r.redraw();
@@ -407,8 +407,8 @@ jQuery(document).ready(function($) {
         }
         break;
       case 73:                                      //'i'
-        if (state == 'zoom_which' && cursor_at != null) {
-          state = 'none';
+        if (state[0] == 'zoom_which' && cursor_at != null) {
+          state[0] = 'none';
           var new_left = (cursor_at[0] + r.left) / 2;
           var new_top = (cursor_at[1] + r.top) / 2;
           r.left = new_left;
@@ -429,9 +429,9 @@ jQuery(document).ready(function($) {
           }
         }
         if (snap_to != null) {
-          if (state == 'delete_which') {
-            state = 'none';
-            r.lines.pop(snap_to); //FIXME
+          if (state[0] == 'delete_which') {
+            state[0] = 'none';
+            r.lines.splice(snap_to, 1);
             r.redraw();
           } else {
             canvas_click(r.lines[snap_to].project_point(cursor_at));
@@ -440,8 +440,8 @@ jQuery(document).ready(function($) {
         }
         break;
       case 79:                                      //'o'
-        if (state == 'zoom_which' && cursor_at != null) {
-          state = 'none';
+        if (state[0] == 'zoom_which' && cursor_at != null) {
+          state[0] = 'none';
           var new_left = r.left * 2 - cursor_at[0];
           var new_top = r.top * 2 - cursor_at[1];
           r.left = new_left;
@@ -451,35 +451,44 @@ jQuery(document).ready(function($) {
         }
         break;
       case 80:                                      //'p'
-        if (cursor_at == null)
-          return;
-        var smldst = SNAP_DISTANCE + 1;
-        for (i=0; i<r.snappoints.length; i++) {
-          var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
-          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
-            smldst = dist;
-            snap_to = i;
-          }
-        }
-        if (snap_to != null) {
-          canvas_click(r.snappoints[snap_to]);
-          snap_to = null;
+        switch (state[0]) {
+          case 'none':
+          case 'point_picked':
+            if (cursor_at == null)
+              return;
+            var smldst = SNAP_DISTANCE + 1;
+            for (i=0; i<r.snappoints.length; i++) {
+              var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
+              if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+                smldst = dist;
+                snap_to = i;
+              }
+            }
+            if (snap_to != null) {
+              canvas_click(r.snappoints[snap_to]);
+              snap_to = null;
+            }
+            break;
+          case 'symmetry_how':
+            state[1] = 'symmetry_point';
+            break;
         }
         break;
       case 83:                                      //'s'
-        var str = JSON.stringify(r);
-        alert(str);
-        jQuery.ajax({
-          url: 'save.php',
-          data: str,
-          complete: function(jqHXR, testStatus) {
-            alert(testStatus);
-          },
-        });
+        //var str = JSON.stringify(r); // TODO save function
+        //alert(str);
+        //jQuery.ajax({
+        //  url: 'save.php',
+        //  data: str,
+        //  complete: function(jqHXR, testStatus) {
+        //    alert(testStatus);
+        //  },
+        //});
+        state[1] = 'symmetry_how';
         break;
       case 86:                                      //'v'
-        if (state == 'point_picked' && draw == 'lines') {
-          state = 'none';
+        if (state[0] == 'point_picked' && draw == 'lines') {
+          state[0] = 'none';
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0], r.mempoint[1] + 1); //make a vertical line
           r.lines.push(l);
           r.redraw();
@@ -490,7 +499,7 @@ jQuery(document).ready(function($) {
         shownext = true;
         break;
       case 90:                                      //'z'
-        state = 'zoom_which';
+        state[0] = 'zoom_which';
         break;
       case 173:                                     //'-'
         stdin_write('-');
@@ -499,7 +508,11 @@ jQuery(document).ready(function($) {
         stdin_write('.');
         break;
       case 192:                                     //'`'
-        alert(state);
+        var state_output = '';
+        for (i=0; i<state.length; i++) {
+          state_output += state[i] + ' ';
+        }
+        alert(state_output);
         break;
     }
   });
@@ -528,6 +541,6 @@ jQuery(document).ready(function($) {
     r.lines = Array();
     r.snappoints = Array();
     r.redraw();
-    state = 'none';
+    state[0] = 'none';
   });
 });
