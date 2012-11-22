@@ -1,7 +1,7 @@
 var SNAP_DISTANCE = 10;
 
 function sq(x) {
-  return x*x;
+  return x * x;
 }
 
 function sgn(x) {
@@ -121,7 +121,8 @@ function region(canvas, left, top, scale) {
   this.scale = scale;
   this.circles = Array();
   this.lines = Array();
-  this.snappoints = Array();
+  this.snappoints = Array([0, 0]);
+  this.repeat_box = [400, 400];
 
   // point (0, 0) is the lower left corner
   this.point_to_pixel = function(p) {
@@ -144,6 +145,14 @@ function region(canvas, left, top, scale) {
     return d / this.scale;
   }
 
+  this.fit_repeat_box = function(p) {
+    while (p[0] < -this.repeat_box[0]/2 || p[0] > this.repeat_box[0]/2)
+      p[0] -= this.repeat_box[0] * sign(p[0]);
+    while (p[1] < -this.repeat_box[1]/2 || p[1] > this.repeat_box[1]/2)
+      p[1] -= this.repeat_box[1] * sign(p[1]);
+    return p;
+  }
+
   this.extend_line = function(l) {
     var dx = l.x2 - l.x1;
     var dy = l.y2 - l.y1;
@@ -164,6 +173,7 @@ function region(canvas, left, top, scale) {
 
   this.draw_point = function(p) {
     var sp = this.point_to_pixel(p);
+    this.ctx.strokeStyle = '000000';
     this.ctx.strokeRect(sp[0]-1, sp[1]-1, 3, 3);
   }
 
@@ -173,6 +183,7 @@ function region(canvas, left, top, scale) {
     var r = this.scale_to_screen(circ.r);
 
     this.ctx.beginPath();
+    this.ctx.strokeStyle = '000000';
     this.ctx.lineWidth = width;
     this.ctx.arc(c[0], c[1], r, 0, 2 * Math.PI);
     this.ctx.stroke();
@@ -185,10 +196,28 @@ function region(canvas, left, top, scale) {
     var p2 = this.point_to_pixel([el.x2, el.y2]);
 
     this.ctx.beginPath();
+    this.ctx.strokeStyle = '000000';
     this.ctx.lineWidth = width;
     this.ctx.moveTo(p1[0], p1[1]);
     this.ctx.lineTo(p2[0], p2[1]);
     this.ctx.stroke();
+  }
+
+  this.draw_origin = function() {
+    var o = this.point_to_pixel([0, 0]);
+    this.ctx.beginPath();
+    this.ctx.strokeStyle = 'FF0000';
+    this.ctx.moveTo(o[0]-4, o[1]);
+    this.ctx.lineTo(o[0]+4, o[1]);
+    this.ctx.moveTo(o[0], o[1]-4);
+    this.ctx.lineTo(o[0], o[1]+4);
+    this.ctx.stroke();
+  }
+
+  this.draw_rect = function(x1, y1, w, h) {
+    var p1 = this.point_to_pixel([x1, y1]);
+    this.ctx.strokeStyle = '000000';
+    this.ctx.strokeRect(p1[0], p1[1], this.scale_to_screen(w), this.scale_to_screen(h));
   }
 
   this.draw_snappoint = function(i) {
@@ -208,7 +237,7 @@ function region(canvas, left, top, scale) {
   }
 
   this.erase_snap = function() {
-    this.redraw(); //FIXME
+    this.redraw(); //TODO better?
   }
 
   this.clear = function() {
@@ -231,7 +260,7 @@ function region(canvas, left, top, scale) {
   }
 
   this.regen_snappoints = function() {
-    this.snappoints = Array();
+    this.snappoints = Array([0, 0]);
 
     for (i=0; i<this.circles.length; i++) {
       for (j=i+1; j<this.circles.length; j++) {
@@ -268,36 +297,38 @@ function region(canvas, left, top, scale) {
 
 jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
-  var r = new region(baseCanvas[0], 0, 600, 1);
-  var state = ['none', 'none'];
+  var offset = baseCanvas.offset();
+  var r = new region(baseCanvas[0], -400, 300, 1);
+  var state = 'none';
   var draw = 'circles';
   var snap_to = null;
-  var offset = baseCanvas.offset();
   var cursor_at = null;
   var shownext = false;
+  var symmetry = null;
 
-  canvas_click = function(p) {
-    switch (state[0]) {
+  var canvas_click = function(p) {
+    var rp = r.fit_repeat_box(p);
+    switch (state) {
       case 'none':
-        state[0] = 'point_picked';
-        r.mempoint = p;
+        state = 'point_picked';
+        r.mempoint = rp;
         r.draw_point(p);
         break;
       case 'point_picked':
         switch (draw) {
           case 'circles':
-            state[0] = 'none';
+            state = 'none';
 
-            cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
+            cr = Math.sqrt(sq(rp[0] - r.mempoint[0]) + sq(rp[1] - r.mempoint[1]));
 
             c = new circle(r.mempoint[0], r.mempoint[1], cr);
             r.circles.push(c);
 
             break;
           case 'lines':
-            state[0] = 'none';
+            state = 'none';
 
-            l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
+            l = new line(r.mempoint[0], r.mempoint[1], rp[0], rp[1]);
             if (l)
               r.lines.push(l);
             break;
@@ -309,7 +340,7 @@ jQuery(document).ready(function($) {
     }
   };
 
-  stdin_write = function(s) {
+  var stdin_write = function(s) {
     var newval = $('#stdin').val() + String(s);
     $('#stdin').val(newval);
     return newval;
@@ -336,11 +367,11 @@ jQuery(document).ready(function($) {
         }
         break;
       case 13:                                      //'enter'
-        if (state[0] == 'point_picked') {
+        if (state == 'point_picked') {
           if (isNaN(parseFloat($('#stdin').val())))
             break;
 
-          state[0] = 'none';
+          state = 'none';
           switch (draw) {
             case 'circles':
               c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
@@ -363,11 +394,20 @@ jQuery(document).ready(function($) {
         if ($('#stdin').val() != '') {
           $('#stdin').val('');
         } else {
-          state[0] = 'none';
+          state = 'none';
           r.redraw();
         }
         break;
-      case 48: case 49: case 50: case 51: case 52:  //'0'-'4'
+      case 48:                                      //'0'
+        if (state == 'zoom_which') {
+          state = 'none';
+          r.left = -400;
+          r.top = 300;
+          r.scale = 1;
+          r.redraw();
+          break;
+        }
+      case 49: case 50: case 51: case 52:  //'1'-'4'
       case 53: case 54: case 55: case 56: case 57:  //'5'-'9'
         stdin_write(String(event.which - 48));
         break;
@@ -384,8 +424,8 @@ jQuery(document).ready(function($) {
           }
         }
         if (snap_to != null) {
-          if (state[0] == 'delete_which') {
-            state[0] = 'none';
+          if (state == 'delete_which') {
+            state = 'none';
             r.circles.splice(snap_to, 1);
             r.redraw();
           } else {
@@ -395,20 +435,28 @@ jQuery(document).ready(function($) {
         }
         break;
       case 68:                                      //'d'
-        state[0] = 'delete_which';
+        state = 'delete_which';
+        break;
+      case 69:                                      //'e'
         break;
       case 72:                                      //'h'
-        if (state[0] == 'point_picked' && draw == 'lines') {
-          state[0] = 'none';
+        if (state == 'point_picked' && draw == 'lines') {
+          state = 'none';
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
           r.lines.push(l);
           r.redraw();
           r.regen_snappoints();
+        } else if (state == 'repeat_where') { //set 'h'orizontal dimension of the repeat box
+          state = 'none';
+          if (! isNaN(parseFloat($('#stdin').val()))) {
+            r.repeat_box[0] = parseFloat($('#stdin').val());
+            r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+          }
         }
         break;
       case 73:                                      //'i'
-        if (state[0] == 'zoom_which' && cursor_at != null) {
-          state[0] = 'none';
+        if (state == 'zoom_which' && cursor_at != null) {
+          state = 'none';
           var new_left = (cursor_at[0] + r.left) / 2;
           var new_top = (cursor_at[1] + r.top) / 2;
           r.left = new_left;
@@ -429,8 +477,8 @@ jQuery(document).ready(function($) {
           }
         }
         if (snap_to != null) {
-          if (state[0] == 'delete_which') {
-            state[0] = 'none';
+          if (state == 'delete_which') {
+            state = 'none';
             r.lines.splice(snap_to, 1);
             r.redraw();
           } else {
@@ -440,18 +488,20 @@ jQuery(document).ready(function($) {
         }
         break;
       case 79:                                      //'o'
-        if (state[0] == 'zoom_which' && cursor_at != null) {
-          state[0] = 'none';
+        if (state == 'zoom_which' && cursor_at != null) {
+          state = 'none';
           var new_left = r.left * 2 - cursor_at[0];
           var new_top = r.top * 2 - cursor_at[1];
           r.left = new_left;
           r.top = new_top;
           r.scale /= 2;
           r.redraw();
+        } else {
+          r.draw_origin();
         }
         break;
       case 80:                                      //'p'
-        switch (state[0]) {
+        switch (state) {
           case 'none':
           case 'point_picked':
             if (cursor_at == null)
@@ -470,11 +520,20 @@ jQuery(document).ready(function($) {
             }
             break;
           case 'symmetry_how':
-            state[1] = 'symmetry_point';
+            symmetry = 'point';
             break;
         }
         break;
+      case 82:                                      //'r'
+        if (state == 'repeat_where') {
+          state = 'none';
+          r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+        } else {
+          state = 'repeat_where';
+        }
+        break;
       case 83:                                      //'s'
+        state = 'symmetry_how';
         //var str = JSON.stringify(r); // TODO save function
         //alert(str);
         //jQuery.ajax({
@@ -484,22 +543,27 @@ jQuery(document).ready(function($) {
         //    alert(testStatus);
         //  },
         //});
-        state[1] = 'symmetry_how';
         break;
       case 86:                                      //'v'
-        if (state[0] == 'point_picked' && draw == 'lines') {
-          state[0] = 'none';
+        if (state == 'point_picked' && draw == 'lines') {
+          state = 'none';
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0], r.mempoint[1] + 1); //make a vertical line
           r.lines.push(l);
           r.redraw();
           r.regen_snappoints();
+        } else if (state == 'repeat_where') { //set 'v'ertical dimension of the repeat box
+          state = 'none';
+          if (! isNaN(parseFloat($('#stdin').val()))) {
+            r.repeat_box[1] = parseFloat($('#stdin').val());
+            r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+          }
         }
         break;
       case 87:                                      //'w'
         shownext = true;
         break;
       case 90:                                      //'z'
-        state[0] = 'zoom_which';
+        state = 'zoom_which';
         break;
       case 173:                                     //'-'
         stdin_write('-');
@@ -539,8 +603,8 @@ jQuery(document).ready(function($) {
   $('#clear_all').click(function() {
     r.circles = Array();
     r.lines = Array();
-    r.snappoints = Array();
+    r.snappoints = Array([0, 0]);
     r.redraw();
-    state[0] = 'none';
+    state = 'none';
   });
 });
