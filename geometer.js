@@ -13,6 +13,9 @@ function sign(x) {
 }
 
 function circle(x, y, r) {
+  if (r == 0)
+    return false;
+
   this.x = parseFloat(x);
   this.y = parseFloat(y);
   this.r = parseFloat(r);
@@ -113,6 +116,9 @@ function line(x1, y1, x2, y2) {
   }
 } // line
 
+function path() { // TODO
+} // path
+
 function region(canvas, left, top, scale) {
   this.canvas = jQuery(canvas);
   this.ctx = canvas.getContext("2d");
@@ -121,10 +127,11 @@ function region(canvas, left, top, scale) {
   this.scale = scale;
   this.circles = Array();
   this.lines = Array();
+  this.paths = Array(Array()); //TODO array of path objects
   this.snappoints = Array([0, 0]);
   this.repeat_box = [400, 400];
+  this.repeat = false;
 
-  // point (0, 0) is the lower left corner
   this.point_to_pixel = function(p) {
     var px = (p[0] - this.left) * this.scale;
     var py = (this.top - p[1]) * this.scale;
@@ -145,6 +152,7 @@ function region(canvas, left, top, scale) {
     return d / this.scale;
   }
 
+  // this works because the repeat box is always centered around the origin
   this.fit_repeat_box = function(p) {
     while (p[0] < -this.repeat_box[0]/2 || p[0] > this.repeat_box[0]/2)
       p[0] -= this.repeat_box[0] * sign(p[0]);
@@ -174,39 +182,66 @@ function region(canvas, left, top, scale) {
   this.draw_point = function(p) {
     var sp = this.point_to_pixel(p);
     this.ctx.strokeStyle = '000000';
+    this.ctx.lineWidth = 1;
     this.ctx.strokeRect(sp[0]-1, sp[1]-1, 3, 3);
   }
 
-  this.draw_circle = function(circ, width) {
+  this.draw_circle = function(circ, width, color) {
     width = typeof width !== 'undefined' ? width : 1;
+    color = typeof color !== 'undefined' ? color : '000000';
     var c = this.point_to_pixel([circ.x, circ.y]);
     var r = this.scale_to_screen(circ.r);
 
     this.ctx.beginPath();
-    this.ctx.strokeStyle = '000000';
+    this.ctx.strokeStyle = color;
     this.ctx.lineWidth = width;
     this.ctx.arc(c[0], c[1], r, 0, 2 * Math.PI);
     this.ctx.stroke();
   }
 
-  this.draw_line = function(l, width) {
+  this.draw_line = function(l, width, color) {
     width = typeof width !== 'undefined' ? width : 1;
+    color = typeof color !== 'undefined' ? color : '000000';
     el = this.extend_line(l);
     var p1 = this.point_to_pixel([el.x1, el.y1]);
     var p2 = this.point_to_pixel([el.x2, el.y2]);
 
     this.ctx.beginPath();
-    this.ctx.strokeStyle = '000000';
+    this.ctx.strokeStyle = color;
     this.ctx.lineWidth = width;
     this.ctx.moveTo(p1[0], p1[1]);
     this.ctx.lineTo(p2[0], p2[1]);
     this.ctx.stroke();
   }
 
+  this.draw_line_segment = function(l, width, color) {
+    width = typeof width !== 'undefined' ? width : 1;
+    color = typeof color !== 'undefined' ? color : '000000';
+    var p1 = this.point_to_pixel([l.x1, l.y1]);
+    var p2 = this.point_to_pixel([l.x2, l.y2]);
+
+    this.ctx.beginPath();
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = width;
+    this.ctx.moveTo(p1[0], p1[1]);
+    this.ctx.lineTo(p2[0], p2[1]);
+    this.ctx.stroke();
+  }
+
+  this.draw_path = function(p, width, color) {
+    width = typeof width !== 'undefined' ? width : 1;
+    color = typeof color !== 'undefined' ? color : '000000';
+    for (var i=0; i<p.length-1; i++) {
+      var l = new line(p[i][0], p[i][1], p[i+1][0], p[i+1][1]);
+      this.draw_line_segment(l, width, color);
+    }
+  }
+
   this.draw_origin = function() {
     var o = this.point_to_pixel([0, 0]);
     this.ctx.beginPath();
     this.ctx.strokeStyle = 'FF0000';
+    this.ctx.lineWidth = 1;
     this.ctx.moveTo(o[0]-4, o[1]);
     this.ctx.lineTo(o[0]+4, o[1]);
     this.ctx.moveTo(o[0], o[1]-4);
@@ -217,53 +252,55 @@ function region(canvas, left, top, scale) {
   this.draw_rect = function(x1, y1, w, h) {
     var p1 = this.point_to_pixel([x1, y1]);
     this.ctx.strokeStyle = '000000';
+    this.ctx.lineWidth = 1;
     this.ctx.strokeRect(p1[0], p1[1], this.scale_to_screen(w), this.scale_to_screen(h));
   }
 
-  this.draw_snappoint = function(i) {
-    this.draw_point(this.snappoints[i]);
-  }
-
-  this.draw_snap_circle_center = function(i) {
-    this.draw_point(this.circles[i][0]);
-  }
-
-  this.draw_snap_circle_circumference = function(i) {
-    this.draw_circle(this.circles[i], 3);
-  }
-
-  this.draw_snap_line = function(i) {
-    this.draw_line(this.lines[i], 3);
-  }
-
-  this.erase_snap = function() {
-    this.redraw(); //TODO better?
-  }
-
-  this.clear = function() {
-    this.ctx.fillStyle = "rgb(255, 255, 255)";
-    this.ctx.fillRect(0, 0, this.canvas.width(), this.canvas.height());
-  }
-
   this.draw_all = function() {
-    for (i=0; i<this.circles.length; i++) {
-      this.draw_circle(this.circles[i]);
-    }
-    for (i=0; i<this.lines.length; i++) {
-      this.draw_line(this.lines[i]);
+    if (this.repeat) {
+      for (var i=-1; i<=1; i++) {
+        for (var j=-1; j<=1; j++) {
+          var offset = [this.repeat_box[0] * i, this.repeat_box[1] * j];
+          var color = (i==0 && j==0) ? '000000' : '999999';
+
+          for (var k=0; k<this.circles.length; k++) {
+            var a = this.circles[k];
+            var b = new circle(a.x + offset[0], a.y + offset[1], a.r);
+            this.draw_circle(b, 1, color);
+          }
+          for (var k=0; k<this.lines.length; k++) {
+            var a = this.lines[k];
+            var b = new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
+            this.draw_line(b, 1, color);
+          }
+          for (var k=0; k<this.paths.length; k++) {
+            //TODO draw repeated paths
+          }
+        }
+      }
+    } else {
+      for (var i=0; i<this.circles.length; i++) {
+        this.draw_circle(this.circles[i]);
+      }
+      for (var i=0; i<this.lines.length; i++) {
+        this.draw_line(this.lines[i]);
+      }
+      for (var i=0; i<this.paths.length; i++) {
+        this.draw_path(this.paths[i], 2);
+      }
     }
   }
 
   this.redraw = function() {
-    this.clear();
+    this.ctx.clearRect(0, 0, this.canvas.width(), this.canvas.height());
     this.draw_all();
   }
 
   this.regen_snappoints = function() {
     this.snappoints = Array([0, 0]);
 
-    for (i=0; i<this.circles.length; i++) {
-      for (j=i+1; j<this.circles.length; j++) {
+    for (var i=0; i<this.circles.length; i++) {
+      for (var j=i+1; j<this.circles.length; j++) {
         ps = this.circles[i].intersect_circle(this.circles[j]);
 
         if (ps != null) {
@@ -272,16 +309,16 @@ function region(canvas, left, top, scale) {
         }
       }
 
-      for (j=0; j<this.lines.length; j++) {
+      for (var j=0; j<this.lines.length; j++) {
         ps = this.circles[i].intersect_line(this.lines[j]);
-        for (k=0; k<ps.length; k++) {
+        for (var k=0; k<ps.length; k++) {
           this.snappoints.push(ps[k]);
         }
       }
     }
 
-    for (i=0; i<this.lines.length; i++) {
-      for (j=i+1; j<this.lines.length; j++) {
+    for (var i=0; i<this.lines.length; i++) {
+      for (var j=i+1; j<this.lines.length; j++) {
         p = this.lines[i].intersect_line(this.lines[j]);
         if (p != null) {
           this.snappoints.push(p);
@@ -301,36 +338,41 @@ jQuery(document).ready(function($) {
   var r = new region(baseCanvas[0], -400, 300, 1);
   var state = 'none';
   var draw = 'circles';
-  var snap_to = null;
   var cursor_at = null;
-  var shownext = false;
   var symmetry = null;
 
   var canvas_click = function(p) {
-    var rp = r.fit_repeat_box(p);
     switch (state) {
       case 'none':
-        state = 'point_picked';
-        r.mempoint = rp;
-        r.draw_point(p);
+        if (draw == 'path') {
+          var curpath = r.paths.length - 1;
+          var lastpoint = r.paths[curpath].length - 1;
+          if (r.paths[curpath].length == 0 || (p[0] != r.paths[curpath][lastpoint][0] || p[1] != r.paths[curpath][lastpoint][1])) {
+            r.paths[curpath].push(p);
+            r.redraw();
+          }
+        } else {
+          state = 'point_picked';
+          r.mempoint = p;
+          r.draw_point(p);
+        }
         break;
       case 'point_picked':
         switch (draw) {
           case 'circles':
             state = 'none';
-
-            cr = Math.sqrt(sq(rp[0] - r.mempoint[0]) + sq(rp[1] - r.mempoint[1]));
-
+            cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
             c = new circle(r.mempoint[0], r.mempoint[1], cr);
-            r.circles.push(c);
-
+            if (c)
+              r.circles.push(c);
             break;
           case 'lines':
             state = 'none';
-
-            l = new line(r.mempoint[0], r.mempoint[1], rp[0], rp[1]);
+            l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
             if (l)
               r.lines.push(l);
+            break;
+          case 'path':
             break;
         }
 
@@ -351,20 +393,36 @@ jQuery(document).ready(function($) {
     var py = event.clientY - offset.top;
     var p = r.pixel_to_point([px, py]);
 
-    canvas_click(p);
+    if (cursor_at != null) {
+      var smldst = SNAP_DISTANCE + 1;
+      var snap_to = null;
+      for (var i=0; i<r.snappoints.length; i++) {
+        var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
+        if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+          smldst = dist;
+          snap_to = i;
+        }
+      }
+      if (snap_to == null) {
+        canvas_click(p);
+      } else {
+        canvas_click(r.snappoints[snap_to]);
+      }
+    }
   });
 
   $(document).keydown(function(event) {
-    if (shownext)
-      (shownext = false) || alert(event.which);
+    if (state == 'alert_next_key') {
+      state = 'none';
+      alert(event.which);
+    }
 
     switch(event.which) {
+      case 8:                                       //'backspace'
+        var curval = $('#stdin').val();
+        $('#stdin').val(curval.substr(0, curval.length - 1));
+        break;
       case 9:                                       //'tab'
-        if (draw == 'circles') {
-          $('#draw_lines').click();
-        } else {
-          $('#draw_circles').click();
-        }
         break;
       case 13:                                      //'enter'
         if (state == 'point_picked') {
@@ -395,8 +453,27 @@ jQuery(document).ready(function($) {
           $('#stdin').val('');
         } else {
           state = 'none';
+          if (r.paths[r.paths.length - 1].length > 0) {
+            r.paths.push(Array());
+          }
           r.redraw();
         }
+        break;
+      case 37:                                      //left arrow
+        r.left -= r.scale_from_screen(10);
+        r.redraw();
+        break;
+      case 38:                                      //up arrow
+        r.top += r.scale_from_screen(10);
+        r.redraw();
+        break;
+      case 39:                                      //right arrow
+        r.left += r.scale_from_screen(10);
+        r.redraw();
+        break;
+      case 40:                                      //down arrow
+        r.top -= r.scale_from_screen(10);
+        r.redraw();
         break;
       case 48:                                      //'0'
         if (state == 'zoom_which') {
@@ -412,26 +489,29 @@ jQuery(document).ready(function($) {
         stdin_write(String(event.which - 48));
         break;
       case 67:                                      //'c'
-        if (cursor_at == null)
-          return;
-        var smldst = SNAP_DISTANCE + 1;
-        for (i=0; i<r.circles.length; i++) {
-          var c_dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
-          var dist = Math.abs(c_dist - r.circles[i].r);
-          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
-            smldst = dist;
-            snap_to = i;
+        //TODO make a switch to catch all state cases. should be able to switch to circles without losing point_picked
+        if (state == 'none') {
+          $('#draw_circles').click();
+        } else if (cursor_at != null) {
+          var smldst = SNAP_DISTANCE + 1;
+          var snap_to = null;
+          for (var i=0; i<r.circles.length; i++) {
+            var c_dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
+            var dist = Math.abs(c_dist - r.circles[i].r);
+            if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+              smldst = dist;
+              snap_to = i;
+            }
           }
-        }
-        if (snap_to != null) {
-          if (state == 'delete_which') {
-            state = 'none';
-            r.circles.splice(snap_to, 1);
-            r.redraw();
-          } else {
-            canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
+          if (snap_to != null) {
+            if (state == 'delete_which') {
+              r.circles.splice(snap_to, 1);
+              r.redraw();
+            } else {
+              canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
+            }
           }
-          snap_to = null;
+          state = 'none';
         }
         break;
       case 68:                                      //'d'
@@ -446,10 +526,11 @@ jQuery(document).ready(function($) {
           r.lines.push(l);
           r.redraw();
           r.regen_snappoints();
-        } else if (state == 'repeat_where') { //set 'h'orizontal dimension of the repeat box
+        } else if (state == 'repeat_where') { //set 'h'eight of the repeat box
           state = 'none';
           if (! isNaN(parseFloat($('#stdin').val()))) {
-            r.repeat_box[0] = parseFloat($('#stdin').val());
+            r.repeat_box[1] = parseFloat($('#stdin').val());
+            r.redraw();
             r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
           }
         }
@@ -466,25 +547,28 @@ jQuery(document).ready(function($) {
         }
         break;
       case 76:                                      //'l'
-        if (cursor_at == null)
-          return;
-        var smldst = SNAP_DISTANCE + 1;
-        for (i=0; i<r.lines.length; i++) {
-          var dist = r.lines[i].dist_to_point(cursor_at);
-          if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
-            smldst = dist;
-            snap_to = i;
+        //TODO switch for all states
+        if (state == 'none') {
+          $('#draw_lines').click();
+        } else if (cursor_at != null) {
+          var smldst = SNAP_DISTANCE + 1;
+          var snap_to = null;
+          for (var i=0; i<r.lines.length; i++) {
+            var dist = r.lines[i].dist_to_point(cursor_at);
+            if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+              smldst = dist;
+              snap_to = i;
+            }
           }
-        }
-        if (snap_to != null) {
-          if (state == 'delete_which') {
-            state = 'none';
-            r.lines.splice(snap_to, 1);
-            r.redraw();
-          } else {
-            canvas_click(r.lines[snap_to].project_point(cursor_at));
+          if (snap_to != null) {
+            if (state == 'delete_which') {
+              r.lines.splice(snap_to, 1);
+              r.redraw();
+            } else {
+              canvas_click(r.lines[snap_to].project_point(cursor_at));
+            }
           }
-          snap_to = null;
+          state = 'none';
         }
         break;
       case 79:                                      //'o'
@@ -503,37 +587,25 @@ jQuery(document).ready(function($) {
       case 80:                                      //'p'
         switch (state) {
           case 'none':
-          case 'point_picked':
-            if (cursor_at == null)
-              return;
-            var smldst = SNAP_DISTANCE + 1;
-            for (i=0; i<r.snappoints.length; i++) {
-              var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
-              if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
-                smldst = dist;
-                snap_to = i;
-              }
-            }
-            if (snap_to != null) {
-              canvas_click(r.snappoints[snap_to]);
-              snap_to = null;
-            }
+            $('#draw_path').click();
             break;
-          case 'symmetry_how':
-            symmetry = 'point';
-            break;
+          case 'delete_which':
+            
         }
         break;
       case 82:                                      //'r'
         if (state == 'repeat_where') {
           state = 'none';
-          r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+          r.repeat = !r.repeat;
+          r.redraw();
         } else {
           state = 'repeat_where';
+          r.redraw();
+          r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
         }
         break;
       case 83:                                      //'s'
-        state = 'symmetry_how';
+        state = 'snap_to';
         //var str = JSON.stringify(r); // TODO save function
         //alert(str);
         //jQuery.ajax({
@@ -560,7 +632,14 @@ jQuery(document).ready(function($) {
         }
         break;
       case 87:                                      //'w'
-        shownext = true;
+        if (state == 'repeat_where') { //set 'w'idth of the repeat box
+          state = 'none';
+          if (! isNaN(parseFloat($('#stdin').val()))) {
+            r.repeat_box[0] = parseFloat($('#stdin').val());
+            r.redraw();
+            r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+          }
+        }
         break;
       case 90:                                      //'z'
         state = 'zoom_which';
@@ -571,14 +650,32 @@ jQuery(document).ready(function($) {
       case 190:                                     //'.'
         stdin_write('.');
         break;
-      case 192:                                     //'`'
-        var state_output = '';
-        for (i=0; i<state.length; i++) {
-          state_output += state[i] + ' ';
+      case 191:                                     //'/'
+        switch (draw) {
+          case 'circles':
+            $('#draw_lines').click();
+            break;
+          case 'lines':
+            $('#draw_path').click();
+            break;
+          case 'path':
+            $('#draw_circles').click();
+            break;
         }
-        alert(state_output);
+        break;
+      case 192:                                     //'`'
+        if (event.shiftKey) {
+          state = 'alert_next_key';
+        } else {
+          var output = 'state: ' + state + '\n';
+          output += 'repeat: ' + r.repeat + '\n';
+          alert(output);
+        }
         break;
     }
+  });
+
+  $(document).click(function() {
   });
 
   $('#baseCanvas').mousemove(function(event) {
@@ -592,17 +689,27 @@ jQuery(document).ready(function($) {
     draw = 'circles';
     $(this).addClass('selected').removeClass('non-selected');
     $('#draw_lines').addClass('non-selected').removeClass('selected');
+    $('#draw_path').addClass('non-selected').removeClass('selected');
   });
 
   $('#draw_lines').click(function() {
     draw = 'lines';
     $(this).addClass('selected').removeClass('non-selected');
     $('#draw_circles').addClass('non-selected').removeClass('selected');
+    $('#draw_path').addClass('non-selected').removeClass('selected');
+  });
+
+  $('#draw_path').click(function() {
+    draw = 'path';
+    $(this).addClass('selected').removeClass('non-selected');
+    $('#draw_lines').addClass('non-selected').removeClass('selected');
+    $('#draw_circles').addClass('non-selected').removeClass('selected');
   });
 
   $('#clear_all').click(function() {
     r.circles = Array();
     r.lines = Array();
+    r.paths = Array(Array());
     r.snappoints = Array([0, 0]);
     r.redraw();
     state = 'none';

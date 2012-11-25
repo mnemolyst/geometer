@@ -21,6 +21,7 @@
     <div id="control-wrapper">
       <div id="draw_circles" class="control selected">circles</div>
       <div id="draw_lines" class="control non-selected">lines</div>
+      <div id="draw_path" class="control non-selected">path</div>
       <div id="clear_all" class="control">clear</div>
       <div><label for="stdin">stdin:</label><input type="text" id="stdin" size="25" readonly="readonly" /></div>
       <div><label for="stdout">stdout:</label><input type="text" id="stdout" size="25" readonly="readonly" /></div>
