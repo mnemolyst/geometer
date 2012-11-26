@@ -116,9 +116,6 @@ function line(x1, y1, x2, y2) {
   }
 } // line
 
-function path() { // TODO
-} // path
-
 function region(canvas, left, top, scale) {
   this.canvas = jQuery(canvas);
   this.ctx = canvas.getContext("2d");
@@ -127,7 +124,7 @@ function region(canvas, left, top, scale) {
   this.scale = scale;
   this.circles = Array();
   this.lines = Array();
-  this.paths = Array(Array()); //TODO array of path objects
+  this.paths = Array(Array());
   this.snappoints = Array([0, 0]);
   this.repeat_box = [400, 400];
   this.repeat = false;
@@ -325,10 +322,6 @@ function region(canvas, left, top, scale) {
         }
       }
     }
-
-    //for (i=0; i<this.snappoints.length; i++) {
-    //  this.draw_point(this.snappoints[i][0]);
-    //}
   }
 } // region
 
@@ -336,7 +329,7 @@ jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
   var offset = baseCanvas.offset();
   var r = new region(baseCanvas[0], -400, 300, 1);
-  var state = 'none';
+  var state = 'none'; //none, FIXME** point_picked **FIXME, delete_which, repeat_where, snap_to, zoom_which, alert_next_key
   var draw = 'circles';
   var cursor_at = null;
   var symmetry = null;
@@ -388,6 +381,15 @@ jQuery(document).ready(function($) {
     return newval;
   }
 
+  var get_two_n = function() {
+    var val1 = parseFloat($('#stdin').val());
+    var val2 = parseFloat($('#mem1').val());
+    if (val1 && val2)
+      return [val1, val2];
+    else
+      return false;
+  }
+
   $('#baseCanvas').click(function(event) {
     var px = event.clientX - offset.left;
     var py = event.clientY - offset.top;
@@ -425,6 +427,14 @@ jQuery(document).ready(function($) {
       case 9:                                       //'tab'
         break;
       case 13:                                      //'enter'
+        if (event.shiftKey && ($('#stdin').val() != '')) {
+          $('#mem4').val($('#mem3').val());
+          $('#mem3').val($('#mem2').val());
+          $('#mem2').val($('#mem1').val());
+          $('#mem1').val($('#stdin').val());
+          $('#stdin').val('');
+          break;
+        }
         if (state == 'point_picked') {
           if (isNaN(parseFloat($('#stdin').val())))
             break;
@@ -433,7 +443,8 @@ jQuery(document).ready(function($) {
           switch (draw) {
             case 'circles':
               c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
-              r.circles.push(c);
+              if (c)
+                r.circles.push(c);
               r.redraw();
               r.regen_snappoints();
               break;
@@ -441,7 +452,8 @@ jQuery(document).ready(function($) {
               rad = $('#stdin').val() * Math.PI / 180;
               v = [Math.cos(rad), Math.sin(rad)];
               l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + v[0], r.mempoint[1] + v[1]);
-              r.lines.push(l);
+              if (l)
+                r.lines.push(l);
               r.redraw();
               r.regen_snappoints();
               break;
@@ -484,7 +496,18 @@ jQuery(document).ready(function($) {
           r.redraw();
           break;
         }
-      case 49: case 50: case 51: case 52:  //'1'-'4'
+      case 56:                                      //'8'
+        if (event.shiftKey) {
+          var vals = get_two_n();
+          if (vals) {
+            $('#stdin').val(vals[0] * vals[1]);
+            $('#mem1').val($('#mem2').val());
+            $('#mem2').val($('#mem3').val());
+            $('#mem3').val($('#mem4').val());
+            break;
+          }
+        }
+      case 56: case 49: case 50: case 51: case 52:  //'0'-'4'
       case 53: case 54: case 55: case 56: case 57:  //'5'-'9'
         stdin_write(String(event.which - 48));
         break;
@@ -493,25 +516,26 @@ jQuery(document).ready(function($) {
         if (state == 'none') {
           $('#draw_circles').click();
         } else if (cursor_at != null) {
-          var smldst = SNAP_DISTANCE + 1;
+          var smldst = r.scale_to_screen(SNAP_DISTANCE) + 1;
           var snap_to = null;
           for (var i=0; i<r.circles.length; i++) {
             var c_dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
             var dist = Math.abs(c_dist - r.circles[i].r);
-            if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            if ((dist <= r.scale_to_screen(SNAP_DISTANCE)) && (dist < smldst)) {
               smldst = dist;
               snap_to = i;
             }
           }
           if (snap_to != null) {
             if (state == 'delete_which') {
+              state = 'none';
               r.circles.splice(snap_to, 1);
               r.redraw();
             } else {
+              state = (state == 'point_picked') ? 'point_picked' : 'none';
               canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
             }
           }
-          state = 'none';
         }
         break;
       case 68:                                      //'d'
@@ -565,6 +589,7 @@ jQuery(document).ready(function($) {
               r.lines.splice(snap_to, 1);
               r.redraw();
             } else {
+              state = 'none';
               canvas_click(r.lines[snap_to].project_point(cursor_at));
             }
           }
@@ -605,7 +630,7 @@ jQuery(document).ready(function($) {
         }
         break;
       case 83:                                      //'s'
-        state = 'snap_to';
+        state = 'snap_to'; //FIXME overwrites 'point_picked'
         //var str = JSON.stringify(r); // TODO save function
         //alert(str);
         //jQuery.ajax({
@@ -651,17 +676,6 @@ jQuery(document).ready(function($) {
         stdin_write('.');
         break;
       case 191:                                     //'/'
-        switch (draw) {
-          case 'circles':
-            $('#draw_lines').click();
-            break;
-          case 'lines':
-            $('#draw_path').click();
-            break;
-          case 'path':
-            $('#draw_circles').click();
-            break;
-        }
         break;
       case 192:                                     //'`'
         if (event.shiftKey) {
@@ -671,6 +685,11 @@ jQuery(document).ready(function($) {
           output += 'repeat: ' + r.repeat + '\n';
           alert(output);
         }
+        break;
+      case 220:                                     //'\'
+        var curval = $('#stdin').val();
+        if (! isNaN(parseFloat(curval)))
+          $('#stdin').val(Math.sqrt(curval));
         break;
     }
   });

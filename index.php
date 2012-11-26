@@ -23,7 +23,14 @@
       <div id="draw_lines" class="control non-selected">lines</div>
       <div id="draw_path" class="control non-selected">path</div>
       <div id="clear_all" class="control">clear</div>
-      <div><label for="stdin">stdin:</label><input type="text" id="stdin" size="25" readonly="readonly" /></div>
+      <div>
+        <label for="stdin">stdin:</label>
+        <input type="text" id="stdin" size="25" readonly="readonly" /><br />
+        <input type="text" id="mem1" size="25" readonly="readonly" class="mem" value="" /><br />
+        <input type="text" id="mem2" size="25" readonly="readonly" class="mem" value="" /><br />
+        <input type="text" id="mem3" size="25" readonly="readonly" class="mem" value="" /><br />
+        <input type="text" id="mem4" size="25" readonly="readonly" class="mem" value="" />
+      </div>
       <div><label for="stdout">stdout:</label><input type="text" id="stdout" size="25" readonly="readonly" /></div>
     </div>
   </div>
