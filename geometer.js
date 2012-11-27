@@ -333,45 +333,46 @@ jQuery(document).ready(function($) {
   var draw = 'circles';
   var cursor_at = null;
   var symmetry = null;
+  var point_picked = false;
 
   var canvas_click = function(p) {
-    switch (state) {
-      case 'none':
-        if (draw == 'path') {
-          var curpath = r.paths.length - 1;
-          var lastpoint = r.paths[curpath].length - 1;
-          if (r.paths[curpath].length == 0 || (p[0] != r.paths[curpath][lastpoint][0] || p[1] != r.paths[curpath][lastpoint][1])) {
-            r.paths[curpath].push(p);
-            r.redraw();
-          }
-        } else {
-          state = 'point_picked';
-          r.mempoint = p;
-          r.draw_point(p);
-        }
-        break;
-      case 'point_picked':
-        switch (draw) {
-          case 'circles':
-            state = 'none';
-            cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
-            c = new circle(r.mempoint[0], r.mempoint[1], cr);
-            if (c)
-              r.circles.push(c);
-            break;
-          case 'lines':
-            state = 'none';
-            l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
-            if (l)
-              r.lines.push(l);
-            break;
-          case 'path':
-            break;
-        }
+    if (point_picked == true) {
+      switch (draw) {
+        case 'circles':
+          state = 'none';
+          point_picked = false;
+          cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
+          c = new circle(r.mempoint[0], r.mempoint[1], cr);
+          if (c)
+            r.circles.push(c);
+          break;
+        case 'lines':
+          state = 'none';
+          point_picked = false;
+          alert(r.mempoint[0] + ' ' + r.mempoint[1] + ' ' + p[0] + ' ' + p[1]);
+          l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
+          if (l)
+            r.lines.push(l);
+          break;
+        case 'path':
+          break;
+      }
 
-        r.redraw();
-        r.regen_snappoints();
-        break;
+      r.redraw();
+      r.regen_snappoints();
+    } else {
+      if (draw == 'path') {
+        var curpath = r.paths.length - 1;
+        var lastpoint = r.paths[curpath].length - 1;
+        if (r.paths[curpath].length == 0 || (p[0] != r.paths[curpath][lastpoint][0] || p[1] != r.paths[curpath][lastpoint][1])) {
+          r.paths[curpath].push(p);
+          r.redraw();
+        }
+      } else {
+        point_picked = true;
+        r.mempoint = p;
+        r.draw_point(p);
+      }
     }
   };
 
@@ -423,6 +424,7 @@ jQuery(document).ready(function($) {
       case 8:                                       //'backspace'
         var curval = $('#stdin').val();
         $('#stdin').val(curval.substr(0, curval.length - 1));
+        event.stopImmediatePropagation();
         break;
       case 9:                                       //'tab'
         break;
@@ -435,13 +437,14 @@ jQuery(document).ready(function($) {
           $('#stdin').val('');
           break;
         }
-        if (state == 'point_picked') {
+        if (point_picked == true) {
           if (isNaN(parseFloat($('#stdin').val())))
             break;
 
-          state = 'none';
           switch (draw) {
             case 'circles':
+              state = 'none';
+              point_picked = false;
               c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
               if (c)
                 r.circles.push(c);
@@ -449,6 +452,8 @@ jQuery(document).ready(function($) {
               r.regen_snappoints();
               break;
             case 'lines':
+              state = 'none';
+              point_picked = false;
               rad = $('#stdin').val() * Math.PI / 180;
               v = [Math.cos(rad), Math.sin(rad)];
               l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + v[0], r.mempoint[1] + v[1]);
@@ -486,6 +491,11 @@ jQuery(document).ready(function($) {
       case 40:                                      //down arrow
         r.top -= r.scale_from_screen(10);
         r.redraw();
+        break;
+      case 46:                                      //'delete'
+        var curval = $('#stdin').val();
+        $('#stdin').val(curval.substr(0, curval.length - 1));
+        event.stopImmediatePropagation();
         break;
       case 48:                                      //'0'
         if (state == 'zoom_which') {
@@ -532,7 +542,7 @@ jQuery(document).ready(function($) {
               r.circles.splice(snap_to, 1);
               r.redraw();
             } else {
-              state = (state == 'point_picked') ? 'point_picked' : 'none';
+              state = 'none';
               canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
             }
           }
@@ -544,8 +554,9 @@ jQuery(document).ready(function($) {
       case 69:                                      //'e'
         break;
       case 72:                                      //'h'
-        if (state == 'point_picked' && draw == 'lines') {
+        if (point_picked == true && draw == 'lines') {
           state = 'none';
+          point_picked = false;
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
           r.lines.push(l);
           r.redraw();
@@ -642,8 +653,9 @@ jQuery(document).ready(function($) {
         //});
         break;
       case 86:                                      //'v'
-        if (state == 'point_picked' && draw == 'lines') {
+        if (point_picked == true && draw == 'lines') {
           state = 'none';
+          point_picked = false;
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0], r.mempoint[1] + 1); //make a vertical line
           r.lines.push(l);
           r.redraw();
@@ -683,6 +695,7 @@ jQuery(document).ready(function($) {
         } else {
           var output = 'state: ' + state + '\n';
           output += 'repeat: ' + r.repeat + '\n';
+          output += 'point_picked: ' + point_picked + '\n';
           alert(output);
         }
         break;
@@ -692,9 +705,6 @@ jQuery(document).ready(function($) {
           $('#stdin').val(Math.sqrt(curval));
         break;
     }
-  });
-
-  $(document).click(function() {
   });
 
   $('#baseCanvas').mousemove(function(event) {
