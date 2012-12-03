@@ -134,8 +134,15 @@ function line(x1, y1, x2, y2) {
       this.intersect_line(lim_top)
     );
 
+    for(i=0; i<intercepts.length; i++) {
+      if (intercepts[i] !== null) {
+        //alert(intercepts[i][0] + ' ' + intercepts[i][1]);
+      }
+    }
+
     var p = Array();
 
+    // FIXME reliably select only two intercepts that will make a valid line, if possible
     if (intercepts[0] !== null && intercepts[0][1] >= lb && intercepts[0][1] <= lt)
       p.push( [ll, intercepts[0][1]] );
     if (intercepts[1] !== null && intercepts[1][1] >= lb && intercepts[1][1] <= lt)
@@ -145,11 +152,7 @@ function line(x1, y1, x2, y2) {
     if (intercepts[3] !== null && intercepts[3][0] >= ll && intercepts[3][0] <= lr)
       p.push( [intercepts[3][0], lt] );
 
-    for(i=0; i<intercepts.length; i++) {
-      if (intercepts[i] !== null) {
-        //alert(intercepts[i][0] + ' ' + intercepts[i][1]);
-      }
-    }
+    alert(p.length);
 
     if (p.length == 2) {
       return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
@@ -301,17 +304,18 @@ function region(canvas, left, top, scale) {
     if (this.repeat) {
       for (var i=-1; i<=1; i++) {
         for (var j=-1; j<=1; j++) {
-          var offset = [this.repeat_box[0] * i, this.repeat_box[1] * j];
-          var color = (i==0 && j==0) ? '000000' : '999999';
+          var is_center = (i==0 && j==0);
+          var offset = is_center ? [0, 0] : [this.repeat_box[0] * i, this.repeat_box[1] * j];
+          var color = is_center ? '000000' : '999999';
 
           for (var k=0; k<this.circles.length; k++) {
             var a = this.circles[k];
-            var b = (i==0 && j==0) ? a : new circle(a.x + offset[0], a.y + offset[1], a.r);
+            var b = is_center ? a : new circle(a.x + offset[0], a.y + offset[1], a.r);
             this.draw_circle(b, 1, color);
           }
           for (var k=0; k<this.lines.length; k++) {
             var a = this.lines[k];
-            var b = (i==0 && j==0) ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
+            var b = is_center ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
             var c = b.fit_box(-this.repeat_box[0] / 2 + offset[0], this.repeat_box[0] / 2 + offset[0], -this.repeat_box[1] / 2 + offset[1], this.repeat_box[1] / 2 + offset[1]);
             this.draw_line(c, 1, color);
           }
