@@ -79,6 +79,7 @@ function line(x1, y1, x2, y2) {
   this.intersect_line = function(l) {
     var denom = (this.x1-this.x2)*(l.y1-l.y2) - (this.y1-this.y2)*(l.x1-l.x2);
     if (denom == 0)
+      //alert('zerodenom' + l.x1 + ' ' + l.y1 + ' ' + l.x2 + ' ' + l.y2);
       return null;
 
     var d3 = d1*(l.x1-l.x2) - d2*(this.x1-this.x2);
@@ -114,6 +115,48 @@ function line(x1, y1, x2, y2) {
     var d = [coef * orth_r[0], coef * orth_r[1]];         // d = shortest vector from 'this' to p
     return [p[0] - d[0], p[1] - d[1]];
   }
+
+  this.fit_box = function(l1, l2, l3, l4) { //limits left, right, bottom, and top
+    var ll = (l1 < l2) ? l1 : l2;
+    var lr = (l1 < l2) ? l2 : l1;
+    var lb = (l3 < l4) ? l3 : l4;
+    var lt = (l3 < l4) ? l4 : l3;
+    var scale = (Math.abs(this.x2 - this.x1) + Math.abs(this.y2 - this.y1)) / 2;
+    var lim_left = new line(ll, 0, ll, scale);
+    var lim_right = new line(lr, 0, lr, scale);
+    var lim_bottom = new line(0, lb, scale, lb);
+    var lim_top = new line(0, lt, scale, lt);
+
+    var intercepts = Array(
+      this.intersect_line(lim_left),
+      this.intersect_line(lim_right),
+      this.intersect_line(lim_bottom),
+      this.intersect_line(lim_top)
+    );
+
+    var p = Array();
+
+    if (intercepts[0] !== null && intercepts[0][1] >= lb && intercepts[0][1] <= lt)
+      p.push( [ll, intercepts[0][1]] );
+    if (intercepts[1] !== null && intercepts[1][1] >= lb && intercepts[1][1] <= lt)
+      p.push( [lr, intercepts[1][1]] );
+    if (intercepts[2] !== null && intercepts[2][0] >= ll && intercepts[2][0] <= lr)
+      p.push( [intercepts[2][0], lb] );
+    if (intercepts[3] !== null && intercepts[3][0] >= ll && intercepts[3][0] <= lr)
+      p.push( [intercepts[3][0], lt] );
+
+    for(i=0; i<intercepts.length; i++) {
+      if (intercepts[i] !== null) {
+        //alert(intercepts[i][0] + ' ' + intercepts[i][1]);
+      }
+    }
+
+    if (p.length == 2) {
+      return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
+    } else {
+      return null;
+    }
+  }
 } // line
 
 function region(canvas, left, top, scale) {
@@ -126,7 +169,7 @@ function region(canvas, left, top, scale) {
   this.lines = Array();
   this.paths = Array(Array());
   this.snappoints = Array([0, 0]);
-  this.repeat_box = [400, 400];
+  this.repeat_box = [600, 600];
   this.repeat = false;
 
   this.point_to_pixel = function(p) {
@@ -197,11 +240,12 @@ function region(canvas, left, top, scale) {
   }
 
   this.draw_line = function(l, width, color) {
+    if (!l) return;
     width = typeof width !== 'undefined' ? width : 1;
     color = typeof color !== 'undefined' ? color : '000000';
-    el = this.extend_line(l);
-    var p1 = this.point_to_pixel([el.x1, el.y1]);
-    var p2 = this.point_to_pixel([el.x2, el.y2]);
+
+    var p1 = this.point_to_pixel([l.x1, l.y1]);
+    var p2 = this.point_to_pixel([l.x2, l.y2]);
 
     this.ctx.beginPath();
     this.ctx.strokeStyle = color;
@@ -262,13 +306,14 @@ function region(canvas, left, top, scale) {
 
           for (var k=0; k<this.circles.length; k++) {
             var a = this.circles[k];
-            var b = new circle(a.x + offset[0], a.y + offset[1], a.r);
+            var b = (i==0 && j==0) ? a : new circle(a.x + offset[0], a.y + offset[1], a.r);
             this.draw_circle(b, 1, color);
           }
           for (var k=0; k<this.lines.length; k++) {
             var a = this.lines[k];
-            var b = new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
-            this.draw_line(b, 1, color);
+            var b = (i==0 && j==0) ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
+            var c = b.fit_box(-this.repeat_box[0] / 2 + offset[0], this.repeat_box[0] / 2 + offset[0], -this.repeat_box[1] / 2 + offset[1], this.repeat_box[1] / 2 + offset[1]);
+            this.draw_line(c, 1, color);
           }
           for (var k=0; k<this.paths.length; k++) {
             //TODO draw repeated paths
@@ -280,7 +325,8 @@ function region(canvas, left, top, scale) {
         this.draw_circle(this.circles[i]);
       }
       for (var i=0; i<this.lines.length; i++) {
-        this.draw_line(this.lines[i]);
+        var el = this.lines[i].fit_box(this.left, this.left + this.scale_from_screen(this.canvas.width()), this.top - this.scale_from_screen(this.canvas.height()), this.top);
+        this.draw_line(el);
       }
       for (var i=0; i<this.paths.length; i++) {
         this.draw_path(this.paths[i], 2);
@@ -328,7 +374,7 @@ function region(canvas, left, top, scale) {
 jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
   var offset = baseCanvas.offset();
-  var r = new region(baseCanvas[0], -400, 300, 1);
+  var r = new region(baseCanvas[0], -300, 300, 1);
   var state = 'none'; //none, FIXME** point_picked **FIXME, delete_which, repeat_where, snap_to, zoom_which, alert_next_key
   var draw = 'circles';
   var cursor_at = null;
@@ -349,7 +395,7 @@ jQuery(document).ready(function($) {
         case 'lines':
           state = 'none';
           point_picked = false;
-          alert(r.mempoint[0] + ' ' + r.mempoint[1] + ' ' + p[0] + ' ' + p[1]);
+          //alert(r.mempoint[0] + ' ' + r.mempoint[1] + ' ' + p[0] + ' ' + p[1]);
           l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
           if (l)
             r.lines.push(l);
@@ -500,7 +546,7 @@ jQuery(document).ready(function($) {
       case 48:                                      //'0'
         if (state == 'zoom_which') {
           state = 'none';
-          r.left = -400;
+          r.left = -300;
           r.top = 300;
           r.scale = 1;
           r.redraw();

@@ -9,13 +9,13 @@
     #content-wrapper { position:relative; }
     #canvas-wrapper { position:absolute; left:0px; top:0px; }
     .canvas { position:absolute; left:0px; top:0px; border:1px solid #000000; }
-    #control-wrapper { position:absolute; left:805px; top:0px; }
+    #control-wrapper { position:absolute; left:605px; top:0px; }
   </style>
 </head>
 <body>
   <div id="content-wrapper">
     <div id="canvas-wrapper">
-      <canvas id="baseCanvas" class="canvas" width="800" height="600">No canvas</canvas>
+      <canvas id="baseCanvas" class="canvas" width="600" height="600">No canvas</canvas>
       <!--<canvas id="infoCanvas" class="canvas" width="800" height="600">No canvas</canvas>-->
     </div>
     <div id="control-wrapper">
