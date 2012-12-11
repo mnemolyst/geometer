@@ -152,7 +152,7 @@ function line(x1, y1, x2, y2) {
     if (intercepts[3] !== null && intercepts[3][0] >= ll && intercepts[3][0] <= lr)
       p.push( [intercepts[3][0], lt] );
 
-    alert(p.length);
+    //alert(p.length);
 
     if (p.length == 2) {
       return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
@@ -272,11 +272,12 @@ function region(canvas, left, top, scale) {
     this.ctx.stroke();
   }
 
-  this.draw_path = function(p, width, color) {
+  this.draw_path = function(p, width, color, offset) {
     width = typeof width !== 'undefined' ? width : 1;
     color = typeof color !== 'undefined' ? color : '000000';
+    offset = typeof offset !== 'undefined' ? offset : [0, 0];
     for (var i=0; i<p.length-1; i++) {
-      var l = new line(p[i][0], p[i][1], p[i+1][0], p[i+1][1]);
+      var l = new line(p[i][0] + offset[0], p[i][1] + offset[1], p[i+1][0] + offset[0], p[i+1][1] + offset[1]);
       this.draw_line_segment(l, width, color);
     }
   }
@@ -320,7 +321,7 @@ function region(canvas, left, top, scale) {
             this.draw_line(c, 1, color);
           }
           for (var k=0; k<this.paths.length; k++) {
-            //TODO draw repeated paths
+            this.draw_path(this.paths[i], 2, color, offset);
           }
         }
       }
