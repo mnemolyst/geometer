@@ -143,16 +143,24 @@ function line(x1, y1, x2, y2) {
     var p = Array();
 
     // FIXME reliably select only two intercepts that will make a valid line, if possible
-    if (intercepts[0] !== null && intercepts[0][1] >= lb && intercepts[0][1] <= lt)
+    if (intercepts[0] !== null && intercepts[0][1] >= lb && intercepts[0][1] <= lt) {
       p.push( [ll, intercepts[0][1]] );
-    if (intercepts[1] !== null && intercepts[1][1] >= lb && intercepts[1][1] <= lt)
+      //alert('0');
+    }
+    if (intercepts[1] !== null && intercepts[1][1] >= lb && intercepts[1][1] <= lt) {
       p.push( [lr, intercepts[1][1]] );
-    if (intercepts[2] !== null && intercepts[2][0] >= ll && intercepts[2][0] <= lr)
+      //alert('1');
+    }
+    if (intercepts[2] !== null && intercepts[2][0] >= ll && intercepts[2][0] <= lr) {
       p.push( [intercepts[2][0], lb] );
-    if (intercepts[3] !== null && intercepts[3][0] >= ll && intercepts[3][0] <= lr)
+      //alert('2');
+    }
+    if (intercepts[3] !== null && intercepts[3][0] >= ll && intercepts[3][0] <= lr) {
       p.push( [intercepts[3][0], lt] );
+      //alert('3');
+    }
 
-    //alert(p.length);
+    //alert('count ' + p.length);
 
     if (p.length == 2) {
       return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
@@ -321,7 +329,7 @@ function region(canvas, left, top, scale) {
             this.draw_line(c, 1, color);
           }
           for (var k=0; k<this.paths.length; k++) {
-            this.draw_path(this.paths[i], 2, color, offset);
+            this.draw_path(this.paths[k], 2, color, offset);
           }
         }
       }
@@ -448,11 +456,11 @@ jQuery(document).ready(function($) {
     var p = r.pixel_to_point([px, py]);
 
     if (cursor_at != null) {
-      var smldst = SNAP_DISTANCE + 1;
+      var smldst = r.scale_from_screen(SNAP_DISTANCE) + 1;
       var snap_to = null;
       for (var i=0; i<r.snappoints.length; i++) {
         var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
-        if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+        if ((dist <= r.scale_from_screen(SNAP_DISTANCE)) && (dist < smldst)) {
           smldst = dist;
           snap_to = i;
         }
@@ -577,12 +585,12 @@ jQuery(document).ready(function($) {
         if (state == 'none') {
           $('#draw_circles').click();
         } else if (cursor_at != null) {
-          var smldst = r.scale_to_screen(SNAP_DISTANCE) + 1;
+          var smldst = r.scale_from_screen(SNAP_DISTANCE) + 1;
           var snap_to = null;
           for (var i=0; i<r.circles.length; i++) {
             var c_dist = Math.sqrt(sq(r.circles[i].x - cursor_at[0]) + sq(r.circles[i].y - cursor_at[1]));
             var dist = Math.abs(c_dist - r.circles[i].r);
-            if ((dist <= r.scale_to_screen(SNAP_DISTANCE)) && (dist < smldst)) {
+            if ((dist <= r.scale_from_screen(SNAP_DISTANCE)) && (dist < smldst)) {
               smldst = dist;
               snap_to = i;
             }
@@ -637,11 +645,11 @@ jQuery(document).ready(function($) {
         if (state == 'none') {
           $('#draw_lines').click();
         } else if (cursor_at != null) {
-          var smldst = SNAP_DISTANCE + 1;
+          var smldst = r.scale_from_screen(SNAP_DISTANCE) + 1;
           var snap_to = null;
           for (var i=0; i<r.lines.length; i++) {
             var dist = r.lines[i].dist_to_point(cursor_at);
-            if ((dist <= SNAP_DISTANCE) && (dist < smldst)) {
+            if ((dist <= r.scale_from_screen(SNAP_DISTANCE)) && (dist < smldst)) {
               smldst = dist;
               snap_to = i;
             }
