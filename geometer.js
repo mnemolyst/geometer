@@ -164,8 +164,8 @@ function line(x1, y1, x2, y2) {
 
     if (p.length == 2) {
       return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
-    } else {
-      return null;
+    } else if (p.length > 2) {
+      var dists = Array(); // TODO find distances of each point to each other point, then eliminates the closest points to each other
     }
   }
 } // line
@@ -326,7 +326,8 @@ function region(canvas, left, top, scale) {
             var a = this.lines[k];
             var b = is_center ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
             var c = b.fit_box(-this.repeat_box[0] / 2 + offset[0], this.repeat_box[0] / 2 + offset[0], -this.repeat_box[1] / 2 + offset[1], this.repeat_box[1] / 2 + offset[1]);
-            this.draw_line(c, 1, color);
+            if (c)
+              this.draw_line(c, 1, color);
           }
           for (var k=0; k<this.paths.length; k++) {
             this.draw_path(this.paths[k], 2, color, offset);
@@ -339,11 +340,22 @@ function region(canvas, left, top, scale) {
       }
       for (var i=0; i<this.lines.length; i++) {
         var el = this.lines[i].fit_box(this.left, this.left + this.scale_from_screen(this.canvas.width()), this.top - this.scale_from_screen(this.canvas.height()), this.top);
-        this.draw_line(el);
+        if (el)
+          this.draw_line(el);
       }
       for (var i=0; i<this.paths.length; i++) {
         this.draw_path(this.paths[i], 2);
       }
+    }
+
+    $('#stdout').html('');
+
+    for (i=0; i<this.paths.length; i++) {
+      $('#stdout').append(i + '\n');
+      for (j=0; j<this.paths[i].length; j++) {
+        $('#stdout').append(' ' + this.paths[i][j][0] + ' ' + this.paths[i][j][1] + '\n');
+      }
+      $('#stdout').append('\n');
     }
   }
 
@@ -630,10 +642,10 @@ jQuery(document).ready(function($) {
         }
         break;
       case 73:                                      //'i'
-        if (state == 'zoom_which' && cursor_at != null) {
+        if (state == 'zoom_which') { //TODO zoom to center of screen
           state = 'none';
-          var new_left = (cursor_at[0] + r.left) / 2;
-          var new_top = (cursor_at[1] + r.top) / 2;
+          var new_left = r.left / 2;
+          var new_top = r.top / 2;
           r.left = new_left;
           r.top = new_top;
           r.scale *= 2;
@@ -667,10 +679,10 @@ jQuery(document).ready(function($) {
         }
         break;
       case 79:                                      //'o'
-        if (state == 'zoom_which' && cursor_at != null) {
+        if (state == 'zoom_which') { //TODO zoom from center of screen
           state = 'none';
-          var new_left = r.left * 2 - cursor_at[0];
-          var new_top = r.top * 2 - cursor_at[1];
+          var new_left = r.left * 2;
+          var new_top = r.top * 2;
           r.left = new_left;
           r.top = new_top;
           r.scale /= 2;
@@ -685,7 +697,31 @@ jQuery(document).ready(function($) {
             $('#draw_path').click();
             break;
           case 'delete_which':
-            
+            if (cursor_at == null) break;
+
+            var smldst = r.scale_from_screen(SNAP_DISTANCE) + 1;
+            var snap_to = null;
+            for (var i=0; i<r.paths.length; i++) {
+              for (var j=0; j<r.paths[i].length; j++) {
+                var p = r.paths[i][j];
+                var dist = Math.sqrt(sq(cursor_at[0] - p[0]) + sq(cursor_at[1] - p[1]));
+                if ((dist <= r.scale_from_screen(SNAP_DISTANCE)) && (dist < smldst)) {
+                  smldst = dist;
+                  snap_to = [i, j];
+                }
+              }
+            }
+            if (snap_to != null) {
+              var num_paths = r.paths.length;
+              r.paths[snap_to[0]].splice(snap_to[1], 1);
+              if (r.paths[snap_to[0]].length <= 1) {
+                r.paths.splice(snap_to[0], 1);
+                if (snap_to[0] == num_paths - 1)
+                  r.paths.push(Array());
+              }
+              r.redraw();
+            }
+            state = 'none';
         }
         break;
       case 82:                                      //'r'
@@ -728,14 +764,21 @@ jQuery(document).ready(function($) {
         }
         break;
       case 87:                                      //'w'
-        if (state == 'repeat_where') { //set 'w'idth of the repeat box
-          state = 'none';
-          if (! isNaN(parseFloat($('#stdin').val()))) {
-            r.repeat_box[0] = parseFloat($('#stdin').val());
-            r.redraw();
-            r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
-          }
+        switch (state) {
+          case 'repeat_where':
+            state = 'none';
+            if (! isNaN(parseFloat($('#stdin').val()))) {
+              r.repeat_box[0] = parseFloat($('#stdin').val());
+              r.redraw();
+              r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+            }
+            break;
+          case 'none':
+            break;
         }
+        break;
+      case 89:                                      //'y'
+        //TODO s'y'mmetry
         break;
       case 90:                                      //'z'
         state = 'zoom_which';
@@ -755,6 +798,8 @@ jQuery(document).ready(function($) {
           var output = 'state: ' + state + '\n';
           output += 'repeat: ' + r.repeat + '\n';
           output += 'point_picked: ' + point_picked + '\n';
+          output += 'num lines: ' + r.lines.length + '\n';
+          output += 'num circles: ' + r.circles.length + '\n';
           alert(output);
         }
         break;

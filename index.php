@@ -31,7 +31,7 @@
         <input type="text" id="mem3" size="25" readonly="readonly" class="mem" value="" /><br />
         <input type="text" id="mem4" size="25" readonly="readonly" class="mem" value="" />
       </div>
-      <div><label for="stdout">stdout:</label><input type="text" id="stdout" size="25" readonly="readonly" /></div>
+      <div><textarea id="stdout" rows="10" cols="25" readonly="readonly"></textarea></div>
     </div>
   </div>
 </body>
