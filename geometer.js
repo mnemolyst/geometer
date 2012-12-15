@@ -12,6 +12,15 @@ function sign(x) {
   return x < 0 ? -1 : x == 0 ? 0 : 1;
 }
 
+function rotate_point (p, a, o) {
+  if (typeof a === 'undefined') return p;
+  o = typeof o !== 'undefined' ? o : [0, 0];
+
+  var c = Math.cos(a);
+  var s = Math.sin(a);
+  return [c * (p[0]-o[0]) - s * (p[1]-o[1]), s * (p[0]-o[0]) + c * (p[1] - o[1])];
+}
+
 function circle(x, y, r) {
   if (r == 0)
     return false;
@@ -182,6 +191,13 @@ function region(canvas, left, top, scale) {
   this.snappoints = Array([0, 0]);
   this.repeat_box = [600, 600];
   this.repeat = false;
+  this.repeat_amount = 1;
+  this.symmetry = null;
+  this.symmem = {
+    'circles': Array(),
+    'lines': Array(),
+    'paths': Array(Array())
+  }
 
   this.point_to_pixel = function(p) {
     var px = (p[0] - this.left) * this.scale;
@@ -311,8 +327,8 @@ function region(canvas, left, top, scale) {
 
   this.draw_all = function() {
     if (this.repeat) {
-      for (var i=-1; i<=1; i++) {
-        for (var j=-1; j<=1; j++) {
+      for (var i=-this.repeat_amount; i<=this.repeat_amount; i++) {
+        for (var j=-this.repeat_amount; j<=this.repeat_amount; j++) {
           var is_center = (i==0 && j==0);
           var offset = is_center ? [0, 0] : [this.repeat_box[0] * i, this.repeat_box[1] * j];
           var color = is_center ? '000000' : '999999';
@@ -394,6 +410,71 @@ function region(canvas, left, top, scale) {
       }
     }
   }
+
+  this.push_circle = function(c) {
+    this.circles.push(c);
+    if (this.symmetry != null) {
+      this.symmem['circles'].push(c);
+    }
+  }
+
+  this.push_line = function(l) {
+    this.lines.push(l);
+    if (this.symmetry != null) {
+      this.symmem['lines'].push(l);
+    }
+  }
+
+  this.push_path_point = function(p) {
+    var curpath = this.paths.length - 1;
+    var lastpoint = this.paths[curpath].length - 1;
+    if (this.paths[curpath].length == 0 || (p[0] != this.paths[curpath][lastpoint][0] || p[1] != this.paths[curpath][lastpoint][1])) {
+      this.paths[curpath].push(p);
+      if (this.symmetry != null) {
+        var mcurpath = this.symmem['paths'].length - 1;
+        this.symmem['paths'][mcurpath].push(p);
+      }
+    }
+  }
+
+  this.end_path = function() {
+    if (this.paths[this.paths.length - 1].length > 0)
+      this.paths.push(Array());
+  }
+
+  this.commit_symmetry = function() {
+    var sym = this.symmetry;
+    this.symmetry = null;
+    var rad_inc = Math.PI * 2 / sym;
+
+    for (var i=1; i < sym; i++) {
+      var rad = rad_inc * i;
+      for (var j=0; j<this.symmem['circles'].length; j++) {
+        var rc = rotate_point([this.symmem['circles'][j].x, this.symmem['circles'][j].y], rad);
+        this.push_circle(new circle(rc[0], rc[1], this.symmem['circles'][j].r));
+      }
+      for (var j=0; j<this.symmem['lines'].length; j++) {
+        var rp1 = rotate_point([this.symmem['lines'][j].x1, this.symmem['lines'][j].y1], rad);
+        var rp2 = rotate_point([this.symmem['lines'][j].x2, this.symmem['lines'][j].y2], rad);
+        this.push_line(new line(rp1[0], rp1[1], rp2[0], rp2[1]));
+      }
+      for (var j=0; j<this.symmem['paths'].length; j++) {
+        this.end_path();
+        for (var k=0; k<this.symmem['paths'][j].length; k++) {
+          var rp = rotate_point(this.symmem['paths'][j][k], rad);
+          this.push_path_point(rp);
+        }
+      }
+      this.end_path();
+      this.regen_snappoints();
+    }
+    this.symmem = {
+      'circles': Array(),
+      'lines': Array(),
+      'paths': Array(Array())
+    }
+    return true;
+  }
 } // region
 
 jQuery(document).ready(function($) {
@@ -403,7 +484,6 @@ jQuery(document).ready(function($) {
   var state = 'none'; //none, FIXME** point_picked **FIXME, delete_which, repeat_where, snap_to, zoom_which, alert_next_key
   var draw = 'circles';
   var cursor_at = null;
-  var symmetry = null;
   var point_picked = false;
 
   var canvas_click = function(p) {
@@ -415,7 +495,7 @@ jQuery(document).ready(function($) {
           cr = Math.sqrt(sq(p[0] - r.mempoint[0]) + sq(p[1] - r.mempoint[1]));
           c = new circle(r.mempoint[0], r.mempoint[1], cr);
           if (c)
-            r.circles.push(c);
+            r.push_circle(c);
           break;
         case 'lines':
           state = 'none';
@@ -423,7 +503,7 @@ jQuery(document).ready(function($) {
           //alert(r.mempoint[0] + ' ' + r.mempoint[1] + ' ' + p[0] + ' ' + p[1]);
           l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
           if (l)
-            r.lines.push(l);
+            r.push_line(l);
           break;
         case 'path':
           break;
@@ -433,12 +513,8 @@ jQuery(document).ready(function($) {
       r.regen_snappoints();
     } else {
       if (draw == 'path') {
-        var curpath = r.paths.length - 1;
-        var lastpoint = r.paths[curpath].length - 1;
-        if (r.paths[curpath].length == 0 || (p[0] != r.paths[curpath][lastpoint][0] || p[1] != r.paths[curpath][lastpoint][1])) {
-          r.paths[curpath].push(p);
-          r.redraw();
-        }
+        r.push_path_point(p);
+        r.redraw();
       } else {
         point_picked = true;
         r.mempoint = p;
@@ -491,6 +567,7 @@ jQuery(document).ready(function($) {
       alert(event.which);
     }
 
+    // KEYS
     switch(event.which) {
       case 8:                                       //'backspace'
         var curval = $('#stdin').val();
@@ -541,8 +618,9 @@ jQuery(document).ready(function($) {
           $('#stdin').val('');
         } else {
           state = 'none';
+          point_picked = false;
           if (r.paths[r.paths.length - 1].length > 0) {
-            r.paths.push(Array());
+            r.end_path();
           }
           r.redraw();
         }
@@ -588,9 +666,22 @@ jQuery(document).ready(function($) {
             break;
           }
         }
-      case 56: case 49: case 50: case 51: case 52:  //'0'-'4'
+      case 48: case 49: case 50: case 51: case 52:  //'0'-'4'
       case 53: case 54: case 55: case 56: case 57:  //'5'-'9'
-        stdin_write(String(event.which - 48));
+        switch (state) {
+          case 'symmetry_how':
+            state = 'none';
+            r.symmetry = event.which - 48;
+            break;
+          case 'repeat_where':
+            state = 'none';
+            r.repeat_amount = event.which - 48;
+            r.redraw();
+            break;
+          default:
+            stdin_write(String(event.which - 48));
+            break;
+        }
         break;
       case 67:                                      //'c'
         //TODO make a switch to catch all state cases. should be able to switch to circles without losing point_picked
@@ -609,18 +700,34 @@ jQuery(document).ready(function($) {
           }
           if (snap_to != null) {
             if (state == 'delete_which') {
-              state = 'none';
+              delete r.circles[snap_to];
               r.circles.splice(snap_to, 1);
               r.redraw();
             } else {
-              state = 'none';
               canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
             }
           }
+          state = 'none';
         }
         break;
       case 68:                                      //'d'
-        state = 'delete_which';
+        switch (state) {
+          case 'delete_which':
+            state = 'delete_steady';
+            break;
+          case 'delete_steady':
+            r.circles = Array();
+            r.lines = Array();
+            r.snappoints = Array([0, 0]);
+            r.redraw();
+            state = 'none';
+            point_picked = false;
+            r.symmetry = null;
+            break;
+          default:
+            state = 'delete_which';
+            break;
+        }
         break;
       case 69:                                      //'e'
         break;
@@ -629,7 +736,7 @@ jQuery(document).ready(function($) {
           state = 'none';
           point_picked = false;
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
-          r.lines.push(l);
+          r.push_line(l);
           r.redraw();
           r.regen_snappoints();
         } else if (state == 'repeat_where') { //set 'h'eight of the repeat box
@@ -668,10 +775,10 @@ jQuery(document).ready(function($) {
           }
           if (snap_to != null) {
             if (state == 'delete_which') {
+              delete r.lines[snap_to];
               r.lines.splice(snap_to, 1);
               r.redraw();
             } else {
-              state = 'none';
               canvas_click(r.lines[snap_to].project_point(cursor_at));
             }
           }
@@ -713,8 +820,10 @@ jQuery(document).ready(function($) {
             }
             if (snap_to != null) {
               var num_paths = r.paths.length;
+              delete r.paths[snap_to[0]][snap_to[1]];
               r.paths[snap_to[0]].splice(snap_to[1], 1);
               if (r.paths[snap_to[0]].length <= 1) {
+                delete r.paths[snap_to[0]];
                 r.paths.splice(snap_to[0], 1);
                 if (snap_to[0] == num_paths - 1)
                   r.paths.push(Array());
@@ -752,7 +861,7 @@ jQuery(document).ready(function($) {
           state = 'none';
           point_picked = false;
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0], r.mempoint[1] + 1); //make a vertical line
-          r.lines.push(l);
+          r.push_line(l);
           r.redraw();
           r.regen_snappoints();
         } else if (state == 'repeat_where') { //set 'v'ertical dimension of the repeat box
@@ -778,7 +887,12 @@ jQuery(document).ready(function($) {
         }
         break;
       case 89:                                      //'y'
-        //TODO s'y'mmetry
+        if (r.symmetry == null) {
+          state = 'symmetry_how';
+        } else {
+          r.commit_symmetry();
+          r.redraw();
+        }
         break;
       case 90:                                      //'z'
         state = 'zoom_which';
@@ -798,6 +912,7 @@ jQuery(document).ready(function($) {
           var output = 'state: ' + state + '\n';
           output += 'repeat: ' + r.repeat + '\n';
           output += 'point_picked: ' + point_picked + '\n';
+          output += 'symmetry: ' + r.symmetry + '\n';
           output += 'num lines: ' + r.lines.length + '\n';
           output += 'num circles: ' + r.circles.length + '\n';
           alert(output);
@@ -846,5 +961,7 @@ jQuery(document).ready(function($) {
     r.snappoints = Array([0, 0]);
     r.redraw();
     state = 'none';
+    point_picked = false;
+    r.symmetry = null;
   });
 });
