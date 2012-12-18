@@ -189,10 +189,11 @@ function region(canvas, left, top, scale) {
   this.lines = Array();
   this.paths = Array(Array());
   this.snappoints = Array([0, 0]);
-  this.repeat_box = [600, 600];
+  this.sym_group = 'square';
+  this.sym_cell = [600, 600];
   this.repeat = false;
   this.repeat_amount = 1;
-  this.symmetry = null;
+  this.rot_sym_fold = null;
   this.symmem = {
     'circles': Array(),
     'lines': Array(),
@@ -220,11 +221,11 @@ function region(canvas, left, top, scale) {
   }
 
   // this works because the repeat box is always centered around the origin
-  this.fit_repeat_box = function(p) {
-    while (p[0] < -this.repeat_box[0]/2 || p[0] > this.repeat_box[0]/2)
-      p[0] -= this.repeat_box[0] * sign(p[0]);
-    while (p[1] < -this.repeat_box[1]/2 || p[1] > this.repeat_box[1]/2)
-      p[1] -= this.repeat_box[1] * sign(p[1]);
+  this.fit_sym_cell = function(p) {
+    while (p[0] < -this.sym_cell[0]/2 || p[0] > this.sym_cell[0]/2)
+      p[0] -= this.sym_cell[0] * sign(p[0]);
+    while (p[1] < -this.sym_cell[1]/2 || p[1] > this.sym_cell[1]/2)
+      p[1] -= this.sym_cell[1] * sign(p[1]);
     return p;
   }
 
@@ -330,7 +331,7 @@ function region(canvas, left, top, scale) {
       for (var i=-this.repeat_amount; i<=this.repeat_amount; i++) {
         for (var j=-this.repeat_amount; j<=this.repeat_amount; j++) {
           var is_center = (i==0 && j==0);
-          var offset = is_center ? [0, 0] : [this.repeat_box[0] * i, this.repeat_box[1] * j];
+          var offset = is_center ? [0, 0] : [this.sym_cell[0] * i, this.sym_cell[1] * j];
           var color = is_center ? '000000' : '999999';
 
           for (var k=0; k<this.circles.length; k++) {
@@ -341,7 +342,7 @@ function region(canvas, left, top, scale) {
           for (var k=0; k<this.lines.length; k++) {
             var a = this.lines[k];
             var b = is_center ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
-            var c = b.fit_box(-this.repeat_box[0] / 2 + offset[0], this.repeat_box[0] / 2 + offset[0], -this.repeat_box[1] / 2 + offset[1], this.repeat_box[1] / 2 + offset[1]);
+            var c = b.fit_box(-this.sym_cell[0] / 2 + offset[0], this.sym_cell[0] / 2 + offset[0], -this.sym_cell[1] / 2 + offset[1], this.sym_cell[1] / 2 + offset[1]);
             if (c)
               this.draw_line(c, 1, color);
           }
@@ -369,7 +370,7 @@ function region(canvas, left, top, scale) {
     for (i=0; i<this.paths.length; i++) {
       $('#stdout').append(i + '\n');
       for (j=0; j<this.paths[i].length; j++) {
-        $('#stdout').append(' ' + this.paths[i][j][0] + ' ' + this.paths[i][j][1] + '\n');
+        $('#stdout').append(' ' + this.paths[i][j][0] + ', ' + this.paths[i][j][1] + '\n');
       }
       $('#stdout').append('\n');
     }
@@ -413,14 +414,14 @@ function region(canvas, left, top, scale) {
 
   this.push_circle = function(c) {
     this.circles.push(c);
-    if (this.symmetry != null) {
+    if (this.rot_sym_fold != null) {
       this.symmem['circles'].push(c);
     }
   }
 
   this.push_line = function(l) {
     this.lines.push(l);
-    if (this.symmetry != null) {
+    if (this.rot_sym_fold != null) {
       this.symmem['lines'].push(l);
     }
   }
@@ -430,7 +431,7 @@ function region(canvas, left, top, scale) {
     var lastpoint = this.paths[curpath].length - 1;
     if (this.paths[curpath].length == 0 || (p[0] != this.paths[curpath][lastpoint][0] || p[1] != this.paths[curpath][lastpoint][1])) {
       this.paths[curpath].push(p);
-      if (this.symmetry != null) {
+      if (this.rot_sym_fold != null) {
         var mcurpath = this.symmem['paths'].length - 1;
         this.symmem['paths'][mcurpath].push(p);
       }
@@ -443,8 +444,8 @@ function region(canvas, left, top, scale) {
   }
 
   this.commit_symmetry = function() {
-    var sym = this.symmetry;
-    this.symmetry = null;
+    var sym = this.rot_sym_fold;
+    this.rot_sym_fold = null;
     var rad_inc = Math.PI * 2 / sym;
 
     for (var i=1; i < sym; i++) {
@@ -595,7 +596,7 @@ jQuery(document).ready(function($) {
               point_picked = false;
               c = new circle(r.mempoint[0], r.mempoint[1], $('#stdin').val());
               if (c)
-                r.circles.push(c);
+                r.push_circle(c);
               r.redraw();
               r.regen_snappoints();
               break;
@@ -606,7 +607,7 @@ jQuery(document).ready(function($) {
               v = [Math.cos(rad), Math.sin(rad)];
               l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + v[0], r.mempoint[1] + v[1]);
               if (l)
-                r.lines.push(l);
+                r.push_line(l);
               r.redraw();
               r.regen_snappoints();
               break;
@@ -655,7 +656,7 @@ jQuery(document).ready(function($) {
           r.redraw();
           break;
         }
-      case 56:                                      //'8'
+      case 56:                                      //'8' and '*'
         if (event.shiftKey) {
           var vals = get_two_n();
           if (vals) {
@@ -671,7 +672,7 @@ jQuery(document).ready(function($) {
         switch (state) {
           case 'symmetry_how':
             state = 'none';
-            r.symmetry = event.which - 48;
+            r.rot_sym_fold = event.which - 48;
             break;
           case 'repeat_where':
             state = 'none';
@@ -722,7 +723,7 @@ jQuery(document).ready(function($) {
             r.redraw();
             state = 'none';
             point_picked = false;
-            r.symmetry = null;
+            r.rot_sym_fold = null;
             break;
           default:
             state = 'delete_which';
@@ -742,9 +743,9 @@ jQuery(document).ready(function($) {
         } else if (state == 'repeat_where') { //set 'h'eight of the repeat box
           state = 'none';
           if (! isNaN(parseFloat($('#stdin').val()))) {
-            r.repeat_box[1] = parseFloat($('#stdin').val());
+            r.sym_cell[1] = parseFloat($('#stdin').val());
             r.redraw();
-            r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+            r.draw_rect(-r.sym_cell[0]/2, r.sym_cell[1]/2, r.sym_cell[0], r.sym_cell[1]);
           }
         }
         break;
@@ -777,7 +778,7 @@ jQuery(document).ready(function($) {
             if (state == 'delete_which') {
               delete r.lines[snap_to];
               r.lines.splice(snap_to, 1);
-              r.redraw();
+              r.redraw(); // TODO also delete the found line from the symmem, if present
             } else {
               canvas_click(r.lines[snap_to].project_point(cursor_at));
             }
@@ -841,20 +842,11 @@ jQuery(document).ready(function($) {
         } else {
           state = 'repeat_where';
           r.redraw();
-          r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+          r.draw_rect(-r.sym_cell[0]/2, r.sym_cell[1]/2, r.sym_cell[0], r.sym_cell[1]);
         }
         break;
       case 83:                                      //'s'
-        state = 'snap_to'; //FIXME overwrites 'point_picked'
-        //var str = JSON.stringify(r); // TODO save function
-        //alert(str);
-        //jQuery.ajax({
-        //  url: 'save.php',
-        //  data: str,
-        //  complete: function(jqHXR, testStatus) {
-        //    alert(testStatus);
-        //  },
-        //});
+        state = 'snap_to';
         break;
       case 86:                                      //'v'
         if (point_picked == true && draw == 'lines') {
@@ -867,8 +859,8 @@ jQuery(document).ready(function($) {
         } else if (state == 'repeat_where') { //set 'v'ertical dimension of the repeat box
           state = 'none';
           if (! isNaN(parseFloat($('#stdin').val()))) {
-            r.repeat_box[1] = parseFloat($('#stdin').val());
-            r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+            r.sym_cell[1] = parseFloat($('#stdin').val());
+            r.draw_rect(-r.sym_cell[0]/2, r.sym_cell[1]/2, r.sym_cell[0], r.sym_cell[1]);
           }
         }
         break;
@@ -877,17 +869,39 @@ jQuery(document).ready(function($) {
           case 'repeat_where':
             state = 'none';
             if (! isNaN(parseFloat($('#stdin').val()))) {
-              r.repeat_box[0] = parseFloat($('#stdin').val());
+              r.sym_cell[0] = parseFloat($('#stdin').val());
               r.redraw();
-              r.draw_rect(-r.repeat_box[0]/2, r.repeat_box[1]/2, r.repeat_box[0], r.repeat_box[1]);
+              r.draw_rect(-r.sym_cell[0]/2, r.sym_cell[1]/2, r.sym_cell[0], r.sym_cell[1]);
             }
             break;
           case 'none':
+            var to_save = Array(
+              'left',
+              'top',
+              'scale',
+              'circles',
+              'lines',
+              'paths',
+              'sym_cell'
+            );
+            var str = '{';
+            for (i=0; i<to_save.length; i++) {
+              str = str + '"' + to_save[i] + '":' + JSON.stringify(r[to_save[i]]);
+              if (i<to_save.length - 1) str = str + ',';
+            }
+            str = str + "}";
+            jQuery.ajax({
+              url: 'save.php',
+              data: str,
+              complete: function(jqHXR, testStatus) {
+                alert(testStatus);
+              },
+            });
             break;
         }
         break;
       case 89:                                      //'y'
-        if (r.symmetry == null) {
+        if (r.rot_sym_fold == null) {
           state = 'symmetry_how';
         } else {
           r.commit_symmetry();
@@ -912,7 +926,7 @@ jQuery(document).ready(function($) {
           var output = 'state: ' + state + '\n';
           output += 'repeat: ' + r.repeat + '\n';
           output += 'point_picked: ' + point_picked + '\n';
-          output += 'symmetry: ' + r.symmetry + '\n';
+          output += 'rot_sym_fold: ' + r.rot_sym_fold + '\n';
           output += 'num lines: ' + r.lines.length + '\n';
           output += 'num circles: ' + r.circles.length + '\n';
           alert(output);
@@ -935,23 +949,50 @@ jQuery(document).ready(function($) {
 
   $('#draw_circles').click(function() {
     draw = 'circles';
+    $('.control-draw').addClass('non-selected').removeClass('selected');
     $(this).addClass('selected').removeClass('non-selected');
-    $('#draw_lines').addClass('non-selected').removeClass('selected');
-    $('#draw_path').addClass('non-selected').removeClass('selected');
   });
 
   $('#draw_lines').click(function() {
     draw = 'lines';
+    $('.control-draw').addClass('non-selected').removeClass('selected');
     $(this).addClass('selected').removeClass('non-selected');
-    $('#draw_circles').addClass('non-selected').removeClass('selected');
-    $('#draw_path').addClass('non-selected').removeClass('selected');
   });
 
   $('#draw_path').click(function() {
     draw = 'path';
+    $('.control-draw').addClass('non-selected').removeClass('selected');
     $(this).addClass('selected').removeClass('non-selected');
-    $('#draw_lines').addClass('non-selected').removeClass('selected');
-    $('#draw_circles').addClass('non-selected').removeClass('selected');
+  });
+
+  $('#rhombic_sym').click(function() {
+    r.sym_group = 'rhombic';
+    $('.control-sym').addClass('non-selected').removeClass('selected');
+    $(this).addClass('selected').removeClass('non-selected');
+  });
+
+  $('#square_sym').click(function() {
+    r.sym_group = 'square';
+    $('.control-sym').addClass('non-selected').removeClass('selected');
+    $(this).addClass('selected').removeClass('non-selected');
+  });
+
+  $('#hexagonal_sym').click(function() {
+    r.sym_group = 'hexagonal';
+    $('.control-sym').addClass('non-selected').removeClass('selected');
+    $(this).addClass('selected').removeClass('non-selected');
+  });
+
+  $('#rectangular_sym').click(function() {
+    r.sym_group = 'rectangular';
+    $('.control-sym').addClass('non-selected').removeClass('selected');
+    $(this).addClass('selected').removeClass('non-selected');
+  });
+
+  $('#parallelogram_sym').click(function() {
+    r.sym_group = 'parallelogram';
+    $('.control-sym').addClass('non-selected').removeClass('selected');
+    $(this).addClass('selected').removeClass('non-selected');
   });
 
   $('#clear_all').click(function() {
@@ -962,6 +1003,6 @@ jQuery(document).ready(function($) {
     r.redraw();
     state = 'none';
     point_picked = false;
-    r.symmetry = null;
+    r.rot_sym_fold = null;
   });
 });
