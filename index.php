@@ -24,8 +24,9 @@
         <p><b>Draw</b></p>
         <div id="draw_circles" class="control control-draw selected">Circles</div>
         <div id="draw_lines" class="control control-draw non-selected">Lines</div>
-        <div id="draw_path" class="control control-draw non-selected">Paths</div><br />
-        <div id="clear_all" class="control control-draw">Clear all</div><br />
+        <div id="draw_path" class="control control-draw non-selected">Paths</div>
+        <div id="random_path" class="control control-draw">Random path</div><br />
+        <div id="clear_all" class="control control-draw">Clear all</div>
       </div>
       <div class="control-group">
         <p><b>Symmetry Group</b></p>

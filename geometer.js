@@ -143,7 +143,12 @@ function line(x1, y1, x2, y2) {
       this.intersect_line(lim_top)
     );
 
-    for(i=0; i<intercepts.length; i++) {
+    delete lim_left;
+    delete lim_right;
+    delete lim_bottom;
+    delete lim_top;
+
+    for (var i=0; i<intercepts.length; i++) {
       if (intercepts[i] !== null) {
         //alert(intercepts[i][0] + ' ' + intercepts[i][1]);
       }
@@ -229,24 +234,6 @@ function region(canvas, left, top, scale) {
     return p;
   }
 
-  this.extend_line = function(l) {
-    var dx = l.x2 - l.x1;
-    var dy = l.y2 - l.y1;
-    var right = this.left + this.scale_from_screen(this.canvas.width());
-    var bottom = this.top - this.scale_from_screen(this.canvas.height());
-    
-    if (dx == 0) {
-      return new line(l.x1, bottom, l.x2, this.top);
-    } else if (dy == 0) {
-      return new line(this.left, l.y1, right, l.y2);
-    } else {
-      var m = dy/dx;
-      var ny1 = l.y1 + m*(this.left - l.x1);
-      var ny2 = l.y1 + m*(right - l.x1);
-      return new line(this.left, ny1, right, ny2);
-    }
-  }
-
   this.draw_point = function(p) {
     var sp = this.point_to_pixel(p);
     this.ctx.strokeStyle = '000000';
@@ -304,6 +291,7 @@ function region(canvas, left, top, scale) {
     for (var i=0; i<p.length-1; i++) {
       var l = new line(p[i][0] + offset[0], p[i][1] + offset[1], p[i+1][0] + offset[0], p[i+1][1] + offset[1]);
       this.draw_line_segment(l, width, color);
+      delete l;
     }
   }
 
@@ -338,13 +326,16 @@ function region(canvas, left, top, scale) {
             var a = this.circles[k];
             var b = is_center ? a : new circle(a.x + offset[0], a.y + offset[1], a.r);
             this.draw_circle(b, 1, color);
+            delete b;
           }
           for (var k=0; k<this.lines.length; k++) {
             var a = this.lines[k];
             var b = is_center ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
             var c = b.fit_box(-this.sym_cell[0] / 2 + offset[0], this.sym_cell[0] / 2 + offset[0], -this.sym_cell[1] / 2 + offset[1], this.sym_cell[1] / 2 + offset[1]);
-            if (c)
+            if (c) {
               this.draw_line(c, 1, color);
+              delete c;
+            }
           }
           for (var k=0; k<this.paths.length; k++) {
             this.draw_path(this.paths[k], 2, color, offset);
@@ -357,8 +348,10 @@ function region(canvas, left, top, scale) {
       }
       for (var i=0; i<this.lines.length; i++) {
         var el = this.lines[i].fit_box(this.left, this.left + this.scale_from_screen(this.canvas.width()), this.top - this.scale_from_screen(this.canvas.height()), this.top);
-        if (el)
+        if (el) {
           this.draw_line(el);
+          delete el;
+        }
       }
       for (var i=0; i<this.paths.length; i++) {
         this.draw_path(this.paths[i], 2);
@@ -367,9 +360,9 @@ function region(canvas, left, top, scale) {
 
     $('#stdout').html('');
 
-    for (i=0; i<this.paths.length; i++) {
+    for (var i=0; i<this.paths.length; i++) {
       $('#stdout').append(i + '\n');
-      for (j=0; j<this.paths[i].length; j++) {
+      for (var j=0; j<this.paths[i].length; j++) {
         $('#stdout').append(' ' + this.paths[i][j][0] + ', ' + this.paths[i][j][1] + '\n');
       }
       $('#stdout').append('\n');
@@ -410,6 +403,10 @@ function region(canvas, left, top, scale) {
         }
       }
     }
+  }
+
+  this.point_in_sym_cell = function(p) {
+    return (Math.abs(p[0] * 2) < this.sym_cell[0] && Math.abs(p[1] * 2) < this.sym_cell[1]);
   }
 
   this.push_circle = function(c) {
@@ -482,7 +479,7 @@ jQuery(document).ready(function($) {
   var baseCanvas = $('#baseCanvas');
   var offset = baseCanvas.offset();
   var r = new region(baseCanvas[0], -300, 300, 1);
-  var state = 'none'; //none, FIXME** point_picked **FIXME, delete_which, repeat_where, snap_to, zoom_which, alert_next_key
+  var state = 'none';
   var draw = 'circles';
   var cursor_at = null;
   var point_picked = false;
@@ -717,6 +714,12 @@ jQuery(document).ready(function($) {
             state = 'delete_steady';
             break;
           case 'delete_steady':
+            for (var i=0; i<r.circles.length; i++) {
+              delete r.circles[i];
+            }
+            for (var i=0; i<r.lines.length; i++) {
+              delete r.lines[i];
+            }
             r.circles = Array();
             r.lines = Array();
             r.snappoints = Array([0, 0]);
@@ -832,6 +835,12 @@ jQuery(document).ready(function($) {
               r.redraw();
             }
             state = 'none';
+            break;
+          case 'delete_steady':
+            r.paths = Array(Array());
+            r.redraw();
+            state = 'none';
+            break;
         }
         break;
       case 82:                                      //'r'
@@ -885,12 +894,12 @@ jQuery(document).ready(function($) {
               'sym_cell'
             );
             var str = '{';
-            for (i=0; i<to_save.length; i++) {
+            for (var i=0; i<to_save.length; i++) {
               str = str + '"' + to_save[i] + '":' + JSON.stringify(r[to_save[i]]);
               if (i<to_save.length - 1) str = str + ',';
             }
             str = str + "}";
-            jQuery.ajax({
+            $.ajax({
               url: 'save.php',
               data: str,
               complete: function(jqHXR, testStatus) {
@@ -965,6 +974,32 @@ jQuery(document).ready(function($) {
     $(this).addClass('selected').removeClass('non-selected');
   });
 
+  $('#random_path').click(function() {
+    var str = '';
+    for (var i=1; i<r.snappoints.length; i++) { // skip the first snappoint (the origin)
+      if (r.point_in_sym_cell(r.snappoints[i])) {
+        str += 'p' + i + '=' + r.snappoints[i][0] + ',' + r.snappoints[i][1] + '&';
+      }
+    }
+    $.ajax({
+      url: 'random_path.php',
+      data: str,
+      type: 'POST',
+      success: function(data) {
+        var points = data.split(';');
+        for (var i=0; i<points.length; i++) {
+          var p = points[i].split(',');
+          r.push_path_point([parseFloat(p[0]), parseFloat(p[1])]);
+        }
+        r.end_path();
+        r.redraw();
+      },
+      error: function(jqXHR, textStatus, errorThrown) {
+        alert(errorThrown);
+      }
+    });
+  });
+
   $('#rhombic_sym').click(function() {
     r.sym_group = 'rhombic';
     $('.control-sym').addClass('non-selected').removeClass('selected');
@@ -996,13 +1031,21 @@ jQuery(document).ready(function($) {
   });
 
   $('#clear_all').click(function() {
-    r.circles = Array();
-    r.lines = Array();
-    r.paths = Array(Array());
-    r.snappoints = Array([0, 0]);
-    r.redraw();
-    state = 'none';
-    point_picked = false;
-    r.rot_sym_fold = null;
+    if (confirm('Clear all?')) {
+      for (var i=0; i<r.circles.length; i++) {
+        delete r.circles[i];
+      }
+      for (var i=0; i<r.lines.length; i++) {
+        delete r.lines[i];
+      }
+      r.circles = Array();
+      r.lines = Array();
+      r.paths = Array(Array());
+      r.snappoints = Array([0, 0]);
+      r.redraw();
+      state = 'none';
+      point_picked = false;
+      r.rot_sym_fold = null;
+    }
   });
 });
