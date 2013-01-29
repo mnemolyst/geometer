@@ -11,6 +11,7 @@
     #canvas-wrapper { position:absolute; left:0px; top:0px; }
     .canvas { position:absolute; left:0px; top:0px; border:1px solid #000000; }
     #control-wrapper { position:absolute; left:605px; top:0px; }
+    .path-point { display:none; }
   </style>
 </head>
 <body>
@@ -45,7 +46,10 @@
           <input type="text" id="mem3" size="25" readonly="readonly" class="mem" value="" /><br />
           <input type="text" id="mem4" size="25" readonly="readonly" class="mem" value="" />
         </div>
-        <div><textarea id="stdout" rows="10" cols="25" readonly="readonly"></textarea></div>
+      </div>
+      <div class="control-group">
+        <!-- <div id="paths-ui"><ul id="paths"></ul></div> -->
+        <textarea id="stdout" cols="80" rows="25"></textarea>
       </div>
     </div>
   </div>

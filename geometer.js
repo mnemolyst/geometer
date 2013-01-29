@@ -1,4 +1,6 @@
 var SNAP_DISTANCE = 10;
+var SCALE_FACTOR = Math.sqrt(2);
+var IDENTITY_THRESHOLD = 0.001;
 
 function sq(x) {
   return x * x;
@@ -192,6 +194,7 @@ function region(canvas, left, top, scale) {
   this.scale = scale;
   this.circles = Array();
   this.lines = Array();
+  this.linex = Array();
   this.paths = Array(Array());
   this.snappoints = Array([0, 0]);
   this.sym_group = 'square';
@@ -325,7 +328,8 @@ function region(canvas, left, top, scale) {
           for (var k=0; k<this.circles.length; k++) {
             var a = this.circles[k];
             var b = is_center ? a : new circle(a.x + offset[0], a.y + offset[1], a.r);
-            this.draw_circle(b, 1, color);
+            if (is_center)
+              this.draw_circle(b, 1, color);
             delete b;
           }
           for (var k=0; k<this.lines.length; k++) {
@@ -333,7 +337,8 @@ function region(canvas, left, top, scale) {
             var b = is_center ? a : new line(a.x1 + offset[0], a.y1 + offset[1], a.x2 + offset[0], a.y2 + offset[1]);
             var c = b.fit_box(-this.sym_cell[0] / 2 + offset[0], this.sym_cell[0] / 2 + offset[0], -this.sym_cell[1] / 2 + offset[1], this.sym_cell[1] / 2 + offset[1]);
             if (c) {
-              this.draw_line(c, 1, color);
+              if (is_center)
+                this.draw_line(c, 1, color);
               delete c;
             }
           }
@@ -376,6 +381,7 @@ function region(canvas, left, top, scale) {
 
   this.regen_snappoints = function() {
     this.snappoints = Array([0, 0]);
+    this.linex = Array(this.lines.length);
 
     for (var i=0; i<this.circles.length; i++) {
       for (var j=i+1; j<this.circles.length; j++) {
@@ -399,10 +405,37 @@ function region(canvas, left, top, scale) {
       for (var j=i+1; j<this.lines.length; j++) {
         p = this.lines[i].intersect_line(this.lines[j]);
         if (p != null) {
-          this.snappoints.push(p);
+          var k = this.snappoints.push(p);
+
+          if (typeof this.linex[i] == 'undefined')
+            this.linex[i] = Array();
+          if (typeof this.linex[j] == 'undefined')
+            this.linex[j] = Array();
+
+          this.linex[i].push(k-1);
+          this.linex[j].push(k-1);
         }
       }
     }
+  }
+
+  this.unique_snappoints = function() {
+    var ret = Array();
+
+    for (var i=0; i<this.snappoints.length; i++) {
+      var unique = true;
+      for (var j=0; j<ret.length; j++) {
+        if ((Math.abs(this.snappoints[i][0] - ret[j][0]) + Math.abs(this.snappoints[i][1] - ret[j][1])) < 0.000001) {
+          unique = false;
+          break;
+        }
+      }
+      if (unique) {
+        ret.push(this.snappoints[i]);
+      }
+    }
+
+    return ret;
   }
 
   this.point_in_sym_cell = function(p) {
@@ -736,7 +769,7 @@ jQuery(document).ready(function($) {
       case 69:                                      //'e'
         break;
       case 72:                                      //'h'
-        if (point_picked == true && draw == 'lines') {
+        if (point_picked == true && draw == 'lines') { //make a 'h'orizontal line
           state = 'none';
           point_picked = false;
           l = new line(r.mempoint[0], r.mempoint[1], r.mempoint[0] + 1, r.mempoint[1]); //make a horizontal line
@@ -753,13 +786,13 @@ jQuery(document).ready(function($) {
         }
         break;
       case 73:                                      //'i'
-        if (state == 'zoom_which') { //TODO zoom to center of screen
+        if (state == 'zoom_which') {
           state = 'none';
-          var new_left = r.left / 2;
-          var new_top = r.top / 2;
+          var new_left = r.left + r.scale_from_screen(r.canvas.width()) * (SCALE_FACTOR - 1) / (2 * SCALE_FACTOR);
+          var new_top = r.top - r.scale_from_screen(r.canvas.height()) * (SCALE_FACTOR - 1) / (2 * SCALE_FACTOR);
           r.left = new_left;
           r.top = new_top;
-          r.scale *= 2;
+          r.scale *= SCALE_FACTOR;
           r.redraw();
         }
         break;
@@ -790,13 +823,13 @@ jQuery(document).ready(function($) {
         }
         break;
       case 79:                                      //'o'
-        if (state == 'zoom_which') { //TODO zoom from center of screen
+        if (state == 'zoom_which') {
           state = 'none';
-          var new_left = r.left * 2;
-          var new_top = r.top * 2;
+          r.scale /= SCALE_FACTOR;
+          var new_left = r.left - r.scale_from_screen(r.canvas.width()) * (SCALE_FACTOR - 1) / (2 * SCALE_FACTOR);
+          var new_top = r.top + r.scale_from_screen(r.canvas.height()) * (SCALE_FACTOR - 1) / (2 * SCALE_FACTOR);
           r.left = new_left;
           r.top = new_top;
-          r.scale /= 2;
           r.redraw();
         } else {
           r.draw_origin();
@@ -975,11 +1008,20 @@ jQuery(document).ready(function($) {
   });
 
   $('#random_path').click(function() {
-    var str = '';
-    for (var i=1; i<r.snappoints.length; i++) { // skip the first snappoint (the origin)
+    var str = 'w=' + r.sym_cell[0] + '&h=' + r.sym_cell[1];
+    var unique_snappoints = r.unique_snappoints();
+    for (var i=0; i<unique_snappoints.length; i++) {
       if (r.point_in_sym_cell(r.snappoints[i])) {
-        str += 'p' + i + '=' + r.snappoints[i][0] + ',' + r.snappoints[i][1] + '&';
+        str += '&p' + i + '=' + r.snappoints[i][0] + ',' + r.snappoints[i][1];
       }
+    }
+    for (var i=0; i<r.linex.length; i++) {
+      var lp = '';
+      for (var j=0; j<r.linex[i].length-1; j++) {
+        lp += r.linex[i][j] + ',';
+      }
+      lp += r.linex[i][j];
+      str += '&l' + i + '=' + lp;
     }
     $.ajax({
       url: 'random_path.php',
@@ -989,10 +1031,11 @@ jQuery(document).ready(function($) {
         var points = data.split(';');
         for (var i=0; i<points.length; i++) {
           var p = points[i].split(',');
-          r.push_path_point([parseFloat(p[0]), parseFloat(p[1])]);
+          r.draw_point([parseFloat(p[0]), parseFloat(p[1])]);
+          //r.push_path_point([parseFloat(p[0]), parseFloat(p[1])]);
         }
-        r.end_path();
-        r.redraw();
+        //r.end_path();
+        //r.redraw();
       },
       error: function(jqXHR, textStatus, errorThrown) {
         alert(errorThrown);
