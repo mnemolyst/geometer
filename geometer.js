@@ -196,7 +196,7 @@ function region(canvas, left, top, scale) {
   this.lines = Array();
   this.linex = Array();
   this.paths = Array(Array());
-  this.snappoints = Array([0, 0]);
+  this.snappoints = Array();
   this.sym_group = 'square';
   this.sym_cell = [600, 600];
   this.repeat = false;
@@ -379,8 +379,18 @@ function region(canvas, left, top, scale) {
     this.draw_all();
   }
 
+  this.push_snappoint = function(p) {
+    for (var i=0; i<this.snappoints.length; i++) {
+      if ((Math.abs(this.snappoints[i][0] - p[0]) + Math.abs(this.snappoints[i][1] - p[1])) < IDENTITY_THRESHOLD) {
+        return false;
+      }
+    }
+    this.snappoints.push(p);
+    return this.snappoints.length;
+  }
+
   this.regen_snappoints = function() {
-    this.snappoints = Array([0, 0]);
+    this.snappoints = Array();
     this.linex = Array(this.lines.length);
 
     for (var i=0; i<this.circles.length; i++) {
@@ -388,15 +398,15 @@ function region(canvas, left, top, scale) {
         ps = this.circles[i].intersect_circle(this.circles[j]);
 
         if (ps != null) {
-          this.snappoints.push(ps[0]);
-          this.snappoints.push(ps[1]);
+          this.push_snappoint(ps[0]);
+          this.push_snappoint(ps[1]);
         }
       }
 
       for (var j=0; j<this.lines.length; j++) {
         ps = this.circles[i].intersect_line(this.lines[j]);
         for (var k=0; k<ps.length; k++) {
-          this.snappoints.push(ps[k]);
+          this.push_snappoint(ps[k]);
         }
       }
     }
@@ -405,37 +415,20 @@ function region(canvas, left, top, scale) {
       for (var j=i+1; j<this.lines.length; j++) {
         p = this.lines[i].intersect_line(this.lines[j]);
         if (p != null) {
-          var k = this.snappoints.push(p);
+          var k = this.push_snappoint(p);
 
-          if (typeof this.linex[i] == 'undefined')
-            this.linex[i] = Array();
-          if (typeof this.linex[j] == 'undefined')
-            this.linex[j] = Array();
+          if (k) {
+            if (typeof this.linex[i] == 'undefined')
+              this.linex[i] = Array();
+            if (typeof this.linex[j] == 'undefined')
+              this.linex[j] = Array();
 
-          this.linex[i].push(k-1);
-          this.linex[j].push(k-1);
+            this.linex[i].push(k-1);
+            this.linex[j].push(k-1);
+          }
         }
       }
     }
-  }
-
-  this.unique_snappoints = function() {
-    var ret = Array();
-
-    for (var i=0; i<this.snappoints.length; i++) {
-      var unique = true;
-      for (var j=0; j<ret.length; j++) {
-        if ((Math.abs(this.snappoints[i][0] - ret[j][0]) + Math.abs(this.snappoints[i][1] - ret[j][1])) < 0.000001) {
-          unique = false;
-          break;
-        }
-      }
-      if (unique) {
-        ret.push(this.snappoints[i]);
-      }
-    }
-
-    return ret;
   }
 
   this.point_in_sym_cell = function(p) {
@@ -577,8 +570,10 @@ jQuery(document).ready(function($) {
     if (cursor_at != null) {
       var smldst = r.scale_from_screen(SNAP_DISTANCE) + 1;
       var snap_to = null;
-      for (var i=0; i<r.snappoints.length; i++) {
-        var dist = Math.abs(r.snappoints[i][0] - cursor_at[0]) + Math.abs(r.snappoints[i][1] - cursor_at[1]);
+      var snappoints = r.snappoints;
+      snappoints.push([0,0]);
+      for (var i=0; i<snappoints.length; i++) {
+        var dist = Math.abs(snappoints[i][0] - cursor_at[0]) + Math.abs(snappoints[i][1] - cursor_at[1]);
         if ((dist <= r.scale_from_screen(SNAP_DISTANCE)) && (dist < smldst)) {
           smldst = dist;
           snap_to = i;
@@ -587,7 +582,7 @@ jQuery(document).ready(function($) {
       if (snap_to == null) {
         canvas_click(p);
       } else {
-        canvas_click(r.snappoints[snap_to]);
+        canvas_click(snappoints[snap_to]);
       }
     }
   });
@@ -734,6 +729,7 @@ jQuery(document).ready(function($) {
               delete r.circles[snap_to];
               r.circles.splice(snap_to, 1);
               r.redraw();
+              r.regen_snappoints();
             } else {
               canvas_click([r.circles[snap_to].x, r.circles[snap_to].y]);
             }
@@ -815,6 +811,7 @@ jQuery(document).ready(function($) {
               delete r.lines[snap_to];
               r.lines.splice(snap_to, 1);
               r.redraw(); // TODO also delete the found line from the symmem, if present
+              r.regen_snappoints();
             } else {
               canvas_click(r.lines[snap_to].project_point(cursor_at));
             }
@@ -969,6 +966,7 @@ jQuery(document).ready(function($) {
           output += 'repeat: ' + r.repeat + '\n';
           output += 'point_picked: ' + point_picked + '\n';
           output += 'rot_sym_fold: ' + r.rot_sym_fold + '\n';
+          output += 'num points: ' + r.snappoints.length + '\n';
           output += 'num lines: ' + r.lines.length + '\n';
           output += 'num circles: ' + r.circles.length + '\n';
           alert(output);
@@ -1009,8 +1007,7 @@ jQuery(document).ready(function($) {
 
   $('#random_path').click(function() {
     var str = 'w=' + r.sym_cell[0] + '&h=' + r.sym_cell[1];
-    var unique_snappoints = r.unique_snappoints();
-    for (var i=0; i<unique_snappoints.length; i++) {
+    for (var i=0; i<r.snappoints.length; i++) {
       if (r.point_in_sym_cell(r.snappoints[i])) {
         str += '&p' + i + '=' + r.snappoints[i][0] + ',' + r.snappoints[i][1];
       }
@@ -1084,7 +1081,7 @@ jQuery(document).ready(function($) {
       r.circles = Array();
       r.lines = Array();
       r.paths = Array(Array());
-      r.snappoints = Array([0, 0]);
+      r.snappoints = Array();
       r.redraw();
       state = 'none';
       point_picked = false;
