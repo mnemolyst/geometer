@@ -1,5 +1,5 @@
 <?php
-  /*$points = array();
+  $points = array();
   $lines = array();
   foreach ($_POST as $k => $v) {
     switch (substr($k, 0, 1)) {
@@ -16,17 +16,16 @@
         $lines[] = explode(',', $v);
         break;
     }
-  }*/
+  }
 
-  //$file = fopen('save', 'w');
+  $file = fopen('save', 'w');
   //fwrite($file, $width);
   //fwrite($file, $height);
-  //fwrite($file, $output);
-  //fwrite($file, var_export($points, TRUE));
-  //fwrite($file, var_export($lines, TRUE));
-  //fclose($file);
+  fwrite($file, var_export($points, TRUE));
+  fwrite($file, var_export($lines, TRUE));
+  fclose($file);
 
-$points = array (
+/*$points = array (
   0 => 
   array (
     0 => '212.13203435596427',
@@ -948,7 +947,7 @@ $lines = array (
     15 => '237',
     16 => '238',
   ),
-);
+);*/
 
   function path_score($path) {
     global $points;

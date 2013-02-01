@@ -1,6 +1,6 @@
 var SNAP_DISTANCE = 10;
 var SCALE_FACTOR = Math.sqrt(2);
-var IDENTITY_THRESHOLD = 0.001;
+var FUDGE = 0.001;
 
 function sq(x) {
   return x * x;
@@ -62,18 +62,18 @@ function circle(x, y, r) {
 
     var sqrtdisc = Math.sqrt(sq(this.r)*dr2 - sq(D));
     if (sqrtdisc < 0)
-      return Array();
+      return [];
     else if (sqrtdisc == 0) {
       var x = D*dy/dr2;
       var y = -D*dx/dr2;
-      return Array([x,y]);
+      return [[x,y]];
     } else {
       var x1 = (D*dy + sgn(dy)*dx*sqrtdisc)/dr2;
       var y1 = (-D*dx + Math.abs(dy)*sqrtdisc)/dr2;
       var x2 = (D*dy - sgn(dy)*dx*sqrtdisc)/dr2;
       var y2 = (-D*dx - Math.abs(dy)*sqrtdisc)/dr2;
 
-      return Array([x1+this.x, y1+this.y],[x2+this.x, y2+this.y]);
+      return [[x1+this.x, y1+this.y],[x2+this.x, y2+this.y]];
     }
   }
 } // circle
@@ -138,12 +138,12 @@ function line(x1, y1, x2, y2) {
     var lim_bottom = new line(0, lb, scale, lb);
     var lim_top = new line(0, lt, scale, lt);
 
-    var intercepts = Array(
+    var intercepts = [
       this.intersect_line(lim_left),
       this.intersect_line(lim_right),
       this.intersect_line(lim_bottom),
       this.intersect_line(lim_top)
-    );
+    ];
 
     delete lim_left;
     delete lim_right;
@@ -156,7 +156,7 @@ function line(x1, y1, x2, y2) {
       }
     }
 
-    var p = Array();
+    var p = [];
 
     // FIXME reliably select only two intercepts that will make a valid line, if possible
     if (intercepts[0] !== null && intercepts[0][1] >= lb && intercepts[0][1] <= lt) {
@@ -181,7 +181,7 @@ function line(x1, y1, x2, y2) {
     if (p.length == 2) {
       return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
     } else if (p.length > 2) {
-      var dists = Array(); // TODO find distances of each point to each other point, then eliminates the closest points to each other
+      var dists = []; // TODO find distances of each point to each other point, then eliminates the closest points to each other
     }
   }
 } // line
@@ -192,20 +192,21 @@ function region(canvas, left, top, scale) {
   this.left = left;
   this.top = top;
   this.scale = scale;
-  this.circles = Array();
-  this.lines = Array();
-  this.linex = Array();
-  this.paths = Array(Array());
-  this.snappoints = Array();
+  this.circles = [];
+  this.lines = [];
+  this.linex = [];
+  this.paths = [[]];
+  this.snappoints = [];
+  this.points_in_sym_cell = [];
   this.sym_group = 'square';
   this.sym_cell = [600, 600];
   this.repeat = false;
   this.repeat_amount = 1;
   this.rot_sym_fold = null;
   this.symmem = {
-    'circles': Array(),
-    'lines': Array(),
-    'paths': Array(Array())
+    'circles': [],
+    'lines': [],
+    'paths': [[]]
   }
 
   this.point_to_pixel = function(p) {
@@ -381,21 +382,23 @@ function region(canvas, left, top, scale) {
 
   this.push_snappoint = function(p) {
     for (var i=0; i<this.snappoints.length; i++) {
-      if ((Math.abs(this.snappoints[i][0] - p[0]) + Math.abs(this.snappoints[i][1] - p[1])) < IDENTITY_THRESHOLD) {
+      if ((Math.abs(this.snappoints[i][0] - p[0]) + Math.abs(this.snappoints[i][1] - p[1])) < FUDGE) {
         return false;
       }
     }
+
     this.snappoints.push(p);
-    return this.snappoints.length;
+    return true;
   }
 
   this.regen_snappoints = function() {
-    this.snappoints = Array();
-    this.linex = Array(this.lines.length);
+    this.snappoints = [];
+    this.points_in_sym_cell = [];
+    this.linex = [];
 
     for (var i=0; i<this.circles.length; i++) {
       for (var j=i+1; j<this.circles.length; j++) {
-        ps = this.circles[i].intersect_circle(this.circles[j]);
+        var ps = this.circles[i].intersect_circle(this.circles[j]);
 
         if (ps != null) {
           this.push_snappoint(ps[0]);
@@ -404,7 +407,7 @@ function region(canvas, left, top, scale) {
       }
 
       for (var j=0; j<this.lines.length; j++) {
-        ps = this.circles[i].intersect_line(this.lines[j]);
+        var ps = this.circles[i].intersect_line(this.lines[j]);
         for (var k=0; k<ps.length; k++) {
           this.push_snappoint(ps[k]);
         }
@@ -413,15 +416,15 @@ function region(canvas, left, top, scale) {
 
     for (var i=0; i<this.lines.length; i++) {
       for (var j=i+1; j<this.lines.length; j++) {
-        p = this.lines[i].intersect_line(this.lines[j]);
+        var p = this.lines[i].intersect_line(this.lines[j]);
         if (p != null) {
-          var k = this.push_snappoint(p);
+          if (this.push_snappoint(p) && this.point_in_sym_cell(p)) {
+            k = this.points_in_sym_cell.push(p);
 
-          if (k) {
             if (typeof this.linex[i] == 'undefined')
-              this.linex[i] = Array();
+              this.linex[i] = [];
             if (typeof this.linex[j] == 'undefined')
-              this.linex[j] = Array();
+              this.linex[j] = [];
 
             this.linex[i].push(k-1);
             this.linex[j].push(k-1);
@@ -432,7 +435,7 @@ function region(canvas, left, top, scale) {
   }
 
   this.point_in_sym_cell = function(p) {
-    return (Math.abs(p[0] * 2) < this.sym_cell[0] && Math.abs(p[1] * 2) < this.sym_cell[1]);
+    return (Math.abs(p[0] * 2) - FUDGE < this.sym_cell[0] && Math.abs(p[1] * 2) - FUDGE < this.sym_cell[1]);
   }
 
   this.push_circle = function(c) {
@@ -463,7 +466,7 @@ function region(canvas, left, top, scale) {
 
   this.end_path = function() {
     if (this.paths[this.paths.length - 1].length > 0)
-      this.paths.push(Array());
+      this.paths.push([]);
   }
 
   this.commit_symmetry = function() {
@@ -493,9 +496,9 @@ function region(canvas, left, top, scale) {
       this.regen_snappoints();
     }
     this.symmem = {
-      'circles': Array(),
-      'lines': Array(),
-      'paths': Array(Array())
+      'circles': [],
+      'lines': [],
+      'paths': [[]]
     }
     return true;
   }
@@ -749,9 +752,9 @@ jQuery(document).ready(function($) {
             for (var i=0; i<r.lines.length; i++) {
               delete r.lines[i];
             }
-            r.circles = Array();
-            r.lines = Array();
-            r.snappoints = Array([0, 0]);
+            r.circles = [];
+            r.lines = [];
+            r.snappoints = [[0, 0]];
             r.redraw();
             state = 'none';
             point_picked = false;
@@ -860,14 +863,14 @@ jQuery(document).ready(function($) {
                 delete r.paths[snap_to[0]];
                 r.paths.splice(snap_to[0], 1);
                 if (snap_to[0] == num_paths - 1)
-                  r.paths.push(Array());
+                  r.paths.push([]);
               }
               r.redraw();
             }
             state = 'none';
             break;
           case 'delete_steady':
-            r.paths = Array(Array());
+            r.paths = [[]];
             r.redraw();
             state = 'none';
             break;
@@ -914,7 +917,7 @@ jQuery(document).ready(function($) {
             }
             break;
           case 'none':
-            var to_save = Array(
+            var to_save = [
               'left',
               'top',
               'scale',
@@ -922,7 +925,7 @@ jQuery(document).ready(function($) {
               'lines',
               'paths',
               'sym_cell'
-            );
+            ];
             var str = '{';
             for (var i=0; i<to_save.length; i++) {
               str = str + '"' + to_save[i] + '":' + JSON.stringify(r[to_save[i]]);
@@ -1007,10 +1010,8 @@ jQuery(document).ready(function($) {
 
   $('#random_path').click(function() {
     var str = 'w=' + r.sym_cell[0] + '&h=' + r.sym_cell[1];
-    for (var i=0; i<r.snappoints.length; i++) {
-      if (r.point_in_sym_cell(r.snappoints[i])) {
-        str += '&p' + i + '=' + r.snappoints[i][0] + ',' + r.snappoints[i][1];
-      }
+    for (var i=0; i<r.points_in_sym_cell.length; i++) {
+      str += '&p' + i + '=' + r.points_in_sym_cell[i][0] + ',' + r.points_in_sym_cell[i][1];
     }
     for (var i=0; i<r.linex.length; i++) {
       var lp = '';
@@ -1078,10 +1079,10 @@ jQuery(document).ready(function($) {
       for (var i=0; i<r.lines.length; i++) {
         delete r.lines[i];
       }
-      r.circles = Array();
-      r.lines = Array();
-      r.paths = Array(Array());
-      r.snappoints = Array();
+      r.circles = [];
+      r.lines = [];
+      r.paths = [[]];
+      r.snappoints = [];
       r.redraw();
       state = 'none';
       point_picked = false;
