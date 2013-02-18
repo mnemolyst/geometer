@@ -90,7 +90,6 @@ function line(x1, y1, x2, y2) {
   this.intersect_line = function(l) {
     var denom = (this.x1-this.x2)*(l.y1-l.y2) - (this.y1-this.y2)*(l.x1-l.x2);
     if (denom == 0)
-      //alert('zerodenom' + l.x1 + ' ' + l.y1 + ' ' + l.x2 + ' ' + l.y2);
       return null;
 
     var d3 = d1*(l.x1-l.x2) - d2*(this.x1-this.x2);
@@ -161,22 +160,16 @@ function line(x1, y1, x2, y2) {
     // FIXME reliably select only two intercepts that will make a valid line, if possible
     if (intercepts[0] !== null && intercepts[0][1] >= lb && intercepts[0][1] <= lt) {
       p.push( [ll, intercepts[0][1]] );
-      //alert('0');
     }
     if (intercepts[1] !== null && intercepts[1][1] >= lb && intercepts[1][1] <= lt) {
       p.push( [lr, intercepts[1][1]] );
-      //alert('1');
     }
     if (intercepts[2] !== null && intercepts[2][0] >= ll && intercepts[2][0] <= lr) {
       p.push( [intercepts[2][0], lb] );
-      //alert('2');
     }
     if (intercepts[3] !== null && intercepts[3][0] >= ll && intercepts[3][0] <= lr) {
       p.push( [intercepts[3][0], lt] );
-      //alert('3');
     }
-
-    //alert('count ' + p.length);
 
     if (p.length == 2) {
       return new line(p[0][0], p[0][1], p[1][0], p[1][1]);
@@ -325,6 +318,7 @@ function region(canvas, left, top, scale) {
           var is_center = (i==0 && j==0);
           var offset = is_center ? [0, 0] : [this.sym_cell[0] * i, this.sym_cell[1] * j];
           var color = is_center ? '000000' : '999999';
+          var color2 = is_center ? 'ff0000' : '000000';
 
           for (var k=0; k<this.circles.length; k++) {
             var a = this.circles[k];
@@ -344,7 +338,7 @@ function region(canvas, left, top, scale) {
             }
           }
           for (var k=0; k<this.paths.length; k++) {
-            this.draw_path(this.paths[k], 2, color, offset);
+            this.draw_path(this.paths[k], 2, color2, offset);
           }
         }
       }
@@ -391,6 +385,17 @@ function region(canvas, left, top, scale) {
     return true;
   }
 
+  this.push_point_in_sym_cell = function(p) {
+    for (var i=0; i<this.points_in_sym_cell.length; i++) {
+      if ((Math.abs(this.points_in_sym_cell[i][0] - p[0]) + Math.abs(this.points_in_sym_cell[i][1] - p[1])) < FUDGE) {
+        return i;
+      }
+    }
+
+    i = this.points_in_sym_cell.push(p);
+    return i-1;
+  }
+
   this.regen_snappoints = function() {
     this.snappoints = [];
     this.points_in_sym_cell = [];
@@ -409,7 +414,17 @@ function region(canvas, left, top, scale) {
       for (var j=0; j<this.lines.length; j++) {
         var ps = this.circles[i].intersect_line(this.lines[j]);
         for (var k=0; k<ps.length; k++) {
-          this.push_snappoint(ps[k]);
+          this.push_snappoint(ps[k])
+
+          if (this.point_in_sym_cell(ps[k])) {
+            var pointx = this.push_point_in_sym_cell(ps[k]);
+
+            if (typeof this.linex[j] == 'undefined')
+              this.linex[j] = [];
+
+            if ($.inArray(pointx, this.linex[j]) == -1);
+              this.linex[j].push(pointx);
+          }
         }
       }
     }
@@ -418,16 +433,20 @@ function region(canvas, left, top, scale) {
       for (var j=i+1; j<this.lines.length; j++) {
         var p = this.lines[i].intersect_line(this.lines[j]);
         if (p != null) {
-          if (this.push_snappoint(p) && this.point_in_sym_cell(p)) {
-            k = this.points_in_sym_cell.push(p);
+          this.push_snappoint(p);
+
+          if (this.point_in_sym_cell(p)) {
+            var pointx = this.push_point_in_sym_cell(p);
 
             if (typeof this.linex[i] == 'undefined')
               this.linex[i] = [];
             if (typeof this.linex[j] == 'undefined')
               this.linex[j] = [];
 
-            this.linex[i].push(k-1);
-            this.linex[j].push(k-1);
+            if ($.inArray(pointx, this.linex[i]) == -1);
+              this.linex[i].push(pointx);
+            if ($.inArray(pointx, this.linex[j]) == -1);
+              this.linex[j].push(pointx);
           }
         }
       }
@@ -435,12 +454,12 @@ function region(canvas, left, top, scale) {
   }
 
   this.point_in_sym_cell = function(p) {
-    return (Math.abs(p[0] * 2) - FUDGE < this.sym_cell[0] && Math.abs(p[1] * 2) - FUDGE < this.sym_cell[1]);
+    return ((Math.abs(p[0] * 2) - FUDGE) < this.sym_cell[0]) && ((Math.abs(p[1] * 2) - FUDGE) < this.sym_cell[1]);
   }
 
   this.push_circle = function(c) {
     this.circles.push(c);
-    if (this.rot_sym_fold != null) {
+    if (this.rot_sym_fold != null) { // if symmetry is happening (user entered 'y')
       this.symmem['circles'].push(c);
     }
   }
@@ -527,7 +546,6 @@ jQuery(document).ready(function($) {
         case 'lines':
           state = 'none';
           point_picked = false;
-          //alert(r.mempoint[0] + ' ' + r.mempoint[1] + ' ' + p[0] + ' ' + p[1]);
           l = new line(r.mempoint[0], r.mempoint[1], p[0], p[1]);
           if (l)
             r.push_line(l);
@@ -970,10 +988,12 @@ jQuery(document).ready(function($) {
           output += 'point_picked: ' + point_picked + '\n';
           output += 'rot_sym_fold: ' + r.rot_sym_fold + '\n';
           output += 'num points: ' + r.snappoints.length + '\n';
+          output += 'num points in sym cell: ' + r.points_in_sym_cell.length + '\n';
           output += 'num lines: ' + r.lines.length + '\n';
           output += 'num circles: ' + r.circles.length + '\n';
           alert(output);
         }
+        $('#stdout').html('circles\n' + JSON.stringify(r.circles) + '\n\nlines\n' + JSON.stringify(r.lines) + '\n\npoints\n' + JSON.stringify(r.snappoints) + '\n\npoints in sym cell\n' + JSON.stringify(r.points_in_sym_cell) + '\n\nlinex\n' + JSON.stringify(r.linex));
         break;
       case 220:                                     //'\'
         var curval = $('#stdin').val();
@@ -1011,34 +1031,58 @@ jQuery(document).ready(function($) {
   $('#random_path').click(function() {
     var str = 'w=' + r.sym_cell[0] + '&h=' + r.sym_cell[1];
     for (var i=0; i<r.points_in_sym_cell.length; i++) {
+      // e.g. += '&p0=2.14,-2.14'
       str += '&p' + i + '=' + r.points_in_sym_cell[i][0] + ',' + r.points_in_sym_cell[i][1];
     }
     for (var i=0; i<r.linex.length; i++) {
       var lp = '';
       for (var j=0; j<r.linex[i].length-1; j++) {
-        lp += r.linex[i][j] + ',';
-      }
-      lp += r.linex[i][j];
+        lp += r.linex[i][j] + ','; }
+        lp += r.linex[i][j];
+      // e.g. += '&l2=3,4,9,12,16'
       str += '&l' + i + '=' + lp;
     }
+
+    alert(str);
+
     $.ajax({
       url: 'random_path.php',
       data: str,
       type: 'POST',
       success: function(data) {
+        alert(data);
         var points = data.split(';');
         for (var i=0; i<points.length; i++) {
           var p = points[i].split(',');
-          r.draw_point([parseFloat(p[0]), parseFloat(p[1])]);
-          //r.push_path_point([parseFloat(p[0]), parseFloat(p[1])]);
+          //r.draw_point([parseFloat(p[0]), parseFloat(p[1])]);
+          r.push_path_point([parseFloat(p[0]), parseFloat(p[1])]);
         }
-        //r.end_path();
-        //r.redraw();
+        r.end_path();
+        r.redraw();
       },
       error: function(jqXHR, textStatus, errorThrown) {
         alert(errorThrown);
       }
     });
+  });
+
+  $('#clear_all').click(function() {
+    if (confirm('Clear all?')) {
+      for (var i=0; i<r.circles.length; i++) {
+        delete r.circles[i];
+      }
+      for (var i=0; i<r.lines.length; i++) {
+        delete r.lines[i];
+      }
+      r.circles = [];
+      r.lines = [];
+      r.paths = [[]];
+      r.snappoints = [];
+      r.redraw();
+      state = 'none';
+      point_picked = false;
+      r.rot_sym_fold = null;
+    }
   });
 
   $('#rhombic_sym').click(function() {
@@ -1071,19 +1115,49 @@ jQuery(document).ready(function($) {
     $(this).addClass('selected').removeClass('non-selected');
   });
 
-  $('#clear_all').click(function() {
-    if (confirm('Clear all?')) {
+  $('#first').click(function() {
+    if (confirm('Replace drawing?')) {
       for (var i=0; i<r.circles.length; i++) {
         delete r.circles[i];
       }
       for (var i=0; i<r.lines.length; i++) {
         delete r.lines[i];
       }
-      r.circles = [];
-      r.lines = [];
+      r.circles = [new circle(0,0,300)];
+      r.lines = [
+        new line(0,0,1,0),
+        new line(0,0,0,1),
+        new line(0,0,0.7071067811865476,0.7071067811865475),
+        new line(0,0,0.7071067811865476,-0.7071067811865475),
+        new line(212.13203435596427,212.13203435596424,0,300),
+        new line(5.684341886080802e-14,300,-212.13203435596424,212.13203435596427),
+        new line(-212.13203435596424,212.13203435596427,-300,1.8369701987210297e-14),
+        new line(-300,5.684341886080802e-14,-212.13203435596427,-212.13203435596424),
+        new line(-212.1320343559643,-212.1320343559642,-3.6739403974420595e-14,-300),
+        new line(-5.684341886080802e-14,-300,212.13203435596424,-212.1320343559643),
+        new line(212.1320343559642,-212.1320343559643,300,-5.510910596163089e-14),
+        new line(300,-5.684341886080802e-14,212.1320343559643,212.13203435596424),
+        new line(-212.13203435596427,212.13203435596424,212.13203435596427,212.13203435596424),
+        new line(0,300,-300,0),
+        new line(-212.13203435596424,-212.13203435596427,-212.13203435596424,212.13203435596427),
+        new line(-300,1.8369701987210297e-14,-1.8369701987210297e-14,-300),
+        new line(212.13203435596424,-212.13203435596427,-212.1320343559643,-212.1320343559642),
+        new line(-3.6739403974420595e-14,-300,300,-3.6739403974420595e-14),
+        new line(212.13203435596427,212.13203435596424,212.1320343559642,-212.1320343559643),
+        new line(300,-5.510910596163089e-14,5.510910596163089e-14,300),
+        new line(-87.86796564403575,212.13203435596427,-87.86796564403576,-212.13203435596427),
+        new line(-212.13203435596427,-87.86796564403575,87.86796564403576,212.13203435596424),
+        new line(-212.13203435596427,-87.86796564403573,212.13203435596427,-87.86796564403578),
+        new line(87.86796564403573,-212.13203435596427,-212.13203435596424,87.86796564403578),
+        new line(87.86796564403572,-212.13203435596427,87.86796564403579,212.13203435596427),
+        new line(212.13203435596427,87.86796564403572,-87.86796564403579,-212.13203435596424),
+        new line(212.1320343559643,87.8679656440357,-212.13203435596424,87.8679656440358),
+        new line(-87.8679656440357,212.1320343559643,212.1320343559642,-87.8679656440358)
+      ];
       r.paths = [[]];
       r.snappoints = [];
       r.redraw();
+      r.regen_snappoints();
       state = 'none';
       point_picked = false;
       r.rot_sym_fold = null;

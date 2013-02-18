@@ -11,6 +11,7 @@
     #canvas-wrapper { position:absolute; left:0px; top:0px; }
     .canvas { position:absolute; left:0px; top:0px; border:1px solid #000000; }
     #control-wrapper { position:absolute; left:605px; top:0px; }
+    #gallery-wrapper { position:absolute; left:605px; top:550px; }
     .path-point { display:none; }
   </style>
 </head>
@@ -51,6 +52,9 @@
         <!-- <div id="paths-ui"><ul id="paths"></ul></div> -->
         <textarea id="stdout" cols="80" rows="25"></textarea>
       </div>
+    </div>
+    <div id="gallery-wrapper">
+      <div id="first" class="control">First</div>
     </div>
   </div>
 </body>
