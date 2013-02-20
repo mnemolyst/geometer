@@ -1,5 +1,5 @@
 var SNAP_DISTANCE = 10;
-var SCALE_FACTOR = Math.sqrt(2);
+var SCALE_FACTOR = Math.sqrt(3);
 var FUDGE = 0.001;
 
 function sq(x) {
@@ -202,6 +202,22 @@ function region(canvas, left, top, scale) {
     'paths': [[]]
   }
 
+  this.reset = function() {
+    for (var i=0; i<this.circles.length; i++) {
+      delete this.circles[i];
+    }
+    for (var i=0; i<this.lines.length; i++) {
+      delete this.lines[i];
+    }
+    this.circles = [];
+    this.lines = [];
+    this.linex = []
+    this.paths = [[]];
+    this.snappoints = [];
+    this.points_in_sym_cell = [];
+    this.rot_sym_fold = null;
+  }
+
   this.point_to_pixel = function(p) {
     var px = (p[0] - this.left) * this.scale;
     var py = (this.top - p[1]) * this.scale;
@@ -231,16 +247,18 @@ function region(canvas, left, top, scale) {
     return p;
   }
 
-  this.draw_point = function(p) {
+  this.draw_point = function(p, width, color) {
+    width = typeof width !== 'undefined' ? width : 1;
+    color = typeof color !== 'undefined' ? color : '#000000';
     var sp = this.point_to_pixel(p);
-    this.ctx.strokeStyle = '000000';
-    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = width;
     this.ctx.strokeRect(sp[0]-1, sp[1]-1, 3, 3);
   }
 
   this.draw_circle = function(circ, width, color) {
     width = typeof width !== 'undefined' ? width : 1;
-    color = typeof color !== 'undefined' ? color : '000000';
+    color = typeof color !== 'undefined' ? color : '#000000';
     var c = this.point_to_pixel([circ.x, circ.y]);
     var r = this.scale_to_screen(circ.r);
 
@@ -254,7 +272,7 @@ function region(canvas, left, top, scale) {
   this.draw_line = function(l, width, color) {
     if (!l) return;
     width = typeof width !== 'undefined' ? width : 1;
-    color = typeof color !== 'undefined' ? color : '000000';
+    color = typeof color !== 'undefined' ? color : '#000000';
 
     var p1 = this.point_to_pixel([l.x1, l.y1]);
     var p2 = this.point_to_pixel([l.x2, l.y2]);
@@ -269,7 +287,7 @@ function region(canvas, left, top, scale) {
 
   this.draw_line_segment = function(l, width, color) {
     width = typeof width !== 'undefined' ? width : 1;
-    color = typeof color !== 'undefined' ? color : '000000';
+    color = typeof color !== 'undefined' ? color : '#000000';
     var p1 = this.point_to_pixel([l.x1, l.y1]);
     var p2 = this.point_to_pixel([l.x2, l.y2]);
 
@@ -283,7 +301,7 @@ function region(canvas, left, top, scale) {
 
   this.draw_path = function(p, width, color, offset) {
     width = typeof width !== 'undefined' ? width : 1;
-    color = typeof color !== 'undefined' ? color : '000000';
+    color = typeof color !== 'undefined' ? color : '#000000';
     offset = typeof offset !== 'undefined' ? offset : [0, 0];
     for (var i=0; i<p.length-1; i++) {
       var l = new line(p[i][0] + offset[0], p[i][1] + offset[1], p[i+1][0] + offset[0], p[i+1][1] + offset[1]);
@@ -295,7 +313,7 @@ function region(canvas, left, top, scale) {
   this.draw_origin = function() {
     var o = this.point_to_pixel([0, 0]);
     this.ctx.beginPath();
-    this.ctx.strokeStyle = 'FF0000';
+    this.ctx.strokeStyle = '#ff0000';
     this.ctx.lineWidth = 1;
     this.ctx.moveTo(o[0]-4, o[1]);
     this.ctx.lineTo(o[0]+4, o[1]);
@@ -306,7 +324,7 @@ function region(canvas, left, top, scale) {
 
   this.draw_rect = function(x1, y1, w, h) {
     var p1 = this.point_to_pixel([x1, y1]);
-    this.ctx.strokeStyle = '000000';
+    this.ctx.strokeStyle = '#000000';
     this.ctx.lineWidth = 1;
     this.ctx.strokeRect(p1[0], p1[1], this.scale_to_screen(w), this.scale_to_screen(h));
   }
@@ -317,8 +335,8 @@ function region(canvas, left, top, scale) {
         for (var j=-this.repeat_amount; j<=this.repeat_amount; j++) {
           var is_center = (i==0 && j==0);
           var offset = is_center ? [0, 0] : [this.sym_cell[0] * i, this.sym_cell[1] * j];
-          var color = is_center ? '000000' : '999999';
-          var color2 = is_center ? 'ff0000' : '000000';
+          var color = is_center ? '#000000' : '#999999';
+          var color2 = is_center ? '#990000' : '#000000';
 
           for (var k=0; k<this.circles.length; k++) {
             var a = this.circles[k];
@@ -416,15 +434,15 @@ function region(canvas, left, top, scale) {
         for (var k=0; k<ps.length; k++) {
           this.push_snappoint(ps[k])
 
-          if (this.point_in_sym_cell(ps[k])) {
+          /*if (this.point_in_sym_cell(ps[k])) {
             var pointx = this.push_point_in_sym_cell(ps[k]);
 
-            if (typeof this.linex[j] == 'undefined')
+            /*if (typeof this.linex[j] == 'undefined')
               this.linex[j] = [];
 
             if ($.inArray(pointx, this.linex[j]) == -1);
-              this.linex[j].push(pointx);
-          }
+              this.linex[j].push(pointx);*\/
+          }*/
         }
       }
     }
@@ -443,14 +461,37 @@ function region(canvas, left, top, scale) {
             if (typeof this.linex[j] == 'undefined')
               this.linex[j] = [];
 
-            if ($.inArray(pointx, this.linex[i]) == -1);
+            if ($.inArray(pointx, this.linex[i]) == -1)
               this.linex[i].push(pointx);
-            if ($.inArray(pointx, this.linex[j]) == -1);
+            if ($.inArray(pointx, this.linex[j]) == -1)
               this.linex[j].push(pointx);
           }
         }
       }
     }
+
+    $('#menu-div').empty();
+    for (var i=0; i<this.linex.length; i++) {
+      var menu_line_div = $('<div id="line-' + i + '" class="menu-line-div">' + JSON.stringify(this.linex[i]) + '</div>');
+      menu_line_div.data('linex_i', i).appendTo($('#menu-div'));
+      //$('#menu-div').append;
+    }
+
+    var illustrate = function(i) {
+      for (var j=0; j<this.linex[i].length; j++) {
+        this.draw_point(this.linex[i][j], 2, '#ff0000');
+      }
+    }
+
+    $('.menu-line-div').hover(
+      function() {
+        var i = $(this).data('linex_i');
+        illustrate(i);
+      },
+      function() {
+        //this.redraw();
+      }
+    );
   }
 
   this.point_in_sym_cell = function(p) {
@@ -764,19 +805,12 @@ jQuery(document).ready(function($) {
             state = 'delete_steady';
             break;
           case 'delete_steady':
-            for (var i=0; i<r.circles.length; i++) {
-              delete r.circles[i];
-            }
-            for (var i=0; i<r.lines.length; i++) {
-              delete r.lines[i];
-            }
-            r.circles = [];
-            r.lines = [];
-            r.snappoints = [[0, 0]];
+            var paths_bk = r.paths;
+            r.reset();
+            r.paths = paths_bk;
             r.redraw();
             state = 'none';
             point_picked = false;
-            r.rot_sym_fold = null;
             break;
           default:
             state = 'delete_which';
@@ -1012,27 +1046,21 @@ jQuery(document).ready(function($) {
 
   $('#draw_circles').click(function() {
     draw = 'circles';
-    $('.control-draw').addClass('non-selected').removeClass('selected');
-    $(this).addClass('selected').removeClass('non-selected');
   });
 
   $('#draw_lines').click(function() {
     draw = 'lines';
-    $('.control-draw').addClass('non-selected').removeClass('selected');
-    $(this).addClass('selected').removeClass('non-selected');
   });
 
   $('#draw_path').click(function() {
     draw = 'path';
-    $('.control-draw').addClass('non-selected').removeClass('selected');
-    $(this).addClass('selected').removeClass('non-selected');
   });
 
   $('#random_path').click(function() {
-    var str = 'w=' + r.sym_cell[0] + '&h=' + r.sym_cell[1];
+    var ajax_str = 'w=' + r.sym_cell[0] + '&h=' + r.sym_cell[1];
     for (var i=0; i<r.points_in_sym_cell.length; i++) {
       // e.g. += '&p0=2.14,-2.14'
-      str += '&p' + i + '=' + r.points_in_sym_cell[i][0] + ',' + r.points_in_sym_cell[i][1];
+      ajax_str += '&p' + i + '=' + r.points_in_sym_cell[i][0] + ',' + r.points_in_sym_cell[i][1];
     }
     for (var i=0; i<r.linex.length; i++) {
       var lp = '';
@@ -1040,17 +1068,15 @@ jQuery(document).ready(function($) {
         lp += r.linex[i][j] + ','; }
         lp += r.linex[i][j];
       // e.g. += '&l2=3,4,9,12,16'
-      str += '&l' + i + '=' + lp;
+      ajax_str += '&l' + i + '=' + lp;
     }
-
-    alert(str);
 
     $.ajax({
       url: 'random_path.php',
-      data: str,
+      data: ajax_str,
       type: 'POST',
       success: function(data) {
-        alert(data);
+        //r.rot_sym_fold = 4;
         var points = data.split(';');
         for (var i=0; i<points.length; i++) {
           var p = points[i].split(',');
@@ -1058,6 +1084,7 @@ jQuery(document).ready(function($) {
           r.push_path_point([parseFloat(p[0]), parseFloat(p[1])]);
         }
         r.end_path();
+        //r.commit_symmetry();
         r.redraw();
       },
       error: function(jqXHR, textStatus, errorThrown) {
@@ -1068,20 +1095,10 @@ jQuery(document).ready(function($) {
 
   $('#clear_all').click(function() {
     if (confirm('Clear all?')) {
-      for (var i=0; i<r.circles.length; i++) {
-        delete r.circles[i];
-      }
-      for (var i=0; i<r.lines.length; i++) {
-        delete r.lines[i];
-      }
-      r.circles = [];
-      r.lines = [];
-      r.paths = [[]];
-      r.snappoints = [];
+      r.reset();
       r.redraw();
       state = 'none';
       point_picked = false;
-      r.rot_sym_fold = null;
     }
   });
 
@@ -1117,12 +1134,7 @@ jQuery(document).ready(function($) {
 
   $('#first').click(function() {
     if (confirm('Replace drawing?')) {
-      for (var i=0; i<r.circles.length; i++) {
-        delete r.circles[i];
-      }
-      for (var i=0; i<r.lines.length; i++) {
-        delete r.lines[i];
-      }
+      r.reset();
       r.circles = [new circle(0,0,300)];
       r.lines = [
         new line(0,0,1,0),
@@ -1130,21 +1142,21 @@ jQuery(document).ready(function($) {
         new line(0,0,0.7071067811865476,0.7071067811865475),
         new line(0,0,0.7071067811865476,-0.7071067811865475),
         new line(212.13203435596427,212.13203435596424,0,300),
-        new line(5.684341886080802e-14,300,-212.13203435596424,212.13203435596427),
-        new line(-212.13203435596424,212.13203435596427,-300,1.8369701987210297e-14),
-        new line(-300,5.684341886080802e-14,-212.13203435596427,-212.13203435596424),
-        new line(-212.1320343559643,-212.1320343559642,-3.6739403974420595e-14,-300),
-        new line(-5.684341886080802e-14,-300,212.13203435596424,-212.1320343559643),
-        new line(212.1320343559642,-212.1320343559643,300,-5.510910596163089e-14),
-        new line(300,-5.684341886080802e-14,212.1320343559643,212.13203435596424),
+        new line(0,300,-212.13203435596424,212.13203435596427),
+        new line(-212.13203435596424,212.13203435596427,-300,0),
+        new line(0,0,-212.13203435596427,-212.13203435596424),
+        new line(-212.1320343559643,-212.1320343559642,0,-300),
+        new line(0,-300,212.13203435596424,-212.1320343559643),
+        new line(212.1320343559642,-212.1320343559643,300,0),
+        new line(300,0,212.1320343559643,212.13203435596424),
         new line(-212.13203435596427,212.13203435596424,212.13203435596427,212.13203435596424),
         new line(0,300,-300,0),
         new line(-212.13203435596424,-212.13203435596427,-212.13203435596424,212.13203435596427),
-        new line(-300,1.8369701987210297e-14,-1.8369701987210297e-14,-300),
+        new line(-300,0,0,-300),
         new line(212.13203435596424,-212.13203435596427,-212.1320343559643,-212.1320343559642),
-        new line(-3.6739403974420595e-14,-300,300,-3.6739403974420595e-14),
+        new line(0,-300,300,0),
         new line(212.13203435596427,212.13203435596424,212.1320343559642,-212.1320343559643),
-        new line(300,-5.510910596163089e-14,5.510910596163089e-14,300),
+        new line(300,0,0,300),
         new line(-87.86796564403575,212.13203435596427,-87.86796564403576,-212.13203435596427),
         new line(-212.13203435596427,-87.86796564403575,87.86796564403576,212.13203435596424),
         new line(-212.13203435596427,-87.86796564403573,212.13203435596427,-87.86796564403578),
@@ -1152,15 +1164,16 @@ jQuery(document).ready(function($) {
         new line(87.86796564403572,-212.13203435596427,87.86796564403579,212.13203435596427),
         new line(212.13203435596427,87.86796564403572,-87.86796564403579,-212.13203435596424),
         new line(212.1320343559643,87.8679656440357,-212.13203435596424,87.8679656440358),
-        new line(-87.8679656440357,212.1320343559643,212.1320343559642,-87.8679656440358)
+        new line(-87.8679656440357,212.1320343559643,212.1320343559642,-87.8679656440358),
+        new line(0,300,1,300),
+        new line(-300,0,-300,1),
+        new line(0,-300,-1,-300),
+        new line(300,0,300,-1)
       ];
-      r.paths = [[]];
-      r.snappoints = [];
       r.redraw();
       r.regen_snappoints();
       state = 'none';
       point_picked = false;
-      r.rot_sym_fold = null;
     }
   });
 });

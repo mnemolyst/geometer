@@ -1,9 +1,42 @@
 <html>
 <head>
+  <!-- scripts and styles -->
   <script type="text/javascript" src="jquery.min.js"></script>
   <script type="text/javascript" src="geometer.js"></script>
+  <script type="text/javascript">
+    jQuery(document).ready(function($) {
+      $('#stdout-on').click(function() {
+        $('#stdout-div').show();
+        $('#menu-div').hide();
+        $('#menu-on').addClass('non-selected').removeClass('selected');
+        $(this).addClass('selected').removeClass('non-selected');
+      });
+
+      $('#menu-on').click(function() {
+        $('#stdout-div').hide();
+        $('#menu-div').show();
+        $('#stdout-on').addClass('non-selected').removeClass('selected');
+        $(this).addClass('selected').removeClass('non-selected');
+      });
+
+      $('#draw_circles').click(function() {
+        $('.control-draw').addClass('non-selected').removeClass('selected');
+        $(this).addClass('selected').removeClass('non-selected');
+      });
+
+      $('#draw_lines').click(function() {
+        $('.control-draw').addClass('non-selected').removeClass('selected');
+        $(this).addClass('selected').removeClass('non-selected');
+      });
+
+      $('#draw_path').click(function() {
+        $('.control-draw').addClass('non-selected').removeClass('selected');
+        $(this).addClass('selected').removeClass('non-selected');
+      });
+    });
+  </script>
   <style type="text/css">
-    .control-group { display:inline-block; vertical-align:top; }
+    .control-group { border:1px solid #999999; padding:5px; margin:3px; display:inline-block; vertical-align:top; }
     .control { border:1px solid #000000; width:200px; }
     .non-selected { background-color:#ffffff; }
     .selected { background-color:#ff0000; }
@@ -11,8 +44,9 @@
     #canvas-wrapper { position:absolute; left:0px; top:0px; }
     .canvas { position:absolute; left:0px; top:0px; border:1px solid #000000; }
     #control-wrapper { position:absolute; left:605px; top:0px; }
-    #gallery-wrapper { position:absolute; left:605px; top:550px; }
+    #gallery-wrapper { position:absolute; left:0px; top:610px; }
     .path-point { display:none; }
+    .menu-line-div { font-size:12px; }
   </style>
 </head>
 <body>
@@ -49,8 +83,10 @@
         </div>
       </div>
       <div class="control-group">
-        <!-- <div id="paths-ui"><ul id="paths"></ul></div> -->
-        <textarea id="stdout" cols="80" rows="25"></textarea>
+        <div id="stdout-on" class="control control-ui selected">STDOUT</div>
+        <div id="menu-on" class="control control-ui non-selected">MENU</div>
+        <div id="stdout-div"><textarea id="stdout" cols="80" rows="25"></textarea></div>
+        <div id="menu-div" style="display:none;"></div>
       </div>
     </div>
     <div id="gallery-wrapper">
